@@ -73,9 +73,53 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/start — главный экран\n"
         "/order — оформить заказ\n"
         "/services — услуги и цены\n"
+        "/faq — часто задаваемые вопросы\n"
+        "/status — проверить статус заказа\n"
         "/contact — контакты\n"
         "/help — эта справка\n\n"
         f"📞 {WORKSHOP_PHONE}\n"
         f"📍 {WORKSHOP_ADDRESS}",
+        parse_mode="Markdown"
+    )
+
+
+async def faq_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Команда /faq"""
+    from keyboards import get_faq_menu
+    await update.message.reply_text(
+        "❓ Выберите интересующий вопрос:",
+        reply_markup=get_faq_menu(),
+        parse_mode="Markdown"
+    )
+
+
+async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Команда /status"""
+    from keyboards import get_back_button
+    from utils.database import get_user_orders
+    
+    user_id = update.effective_user.id
+    orders = get_user_orders(user_id)
+    
+    if not orders:
+        text = "🔍 У вас нет заказов.\n\nПозвоните нам: " + WORKSHOP_PHONE
+    else:
+        from handlers.orders import format_order_id
+        text = "🔍 *Ваши заказы:*\n\n"
+        status_map = {
+            'new': '🆕 Новый',
+            'in_progress': '🔄 В работе',
+            'completed': '✅ Готов',
+            'issued': '📤 Выдан',
+            'cancelled': '❌ Отменён'
+        }
+        for order in orders[:5]:
+            status = status_map.get(str(order.status), str(order.status))
+            desc = str(order.description) if order.description else 'Услуга'
+            formatted_id = format_order_id(int(order.id), order.created_at)
+            text += f"*{formatted_id}* - {status}\n{desc}\n\n"
+    
+    await update.message.reply_text(
+        text=text,
         parse_mode="Markdown"
     )

@@ -53,6 +53,7 @@ def start_health_server(port=8080):
     logging.info(f"✅ Health check сервер запущен на порту {port}")
 
 from handlers import commands, messages, admin
+from handlers.commands import faq_command, status_command
 from handlers.orders import (
     order_start, select_service, receive_photo, skip_photo,
     enter_name, enter_phone, confirm_order, cancel_order,
@@ -493,6 +494,8 @@ def main() -> None:
     
     app.add_handler(CommandHandler("start", commands.start))
     app.add_handler(CommandHandler("help", commands.help_command))
+    app.add_handler(CommandHandler("faq", faq_command))
+    app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("services", services_command))
     app.add_handler(CommandHandler("contact", contact_command))
     
@@ -551,6 +554,8 @@ def main() -> None:
         await application.bot.set_my_commands([
             BotCommand("start", "🏠 Главное меню"),
             BotCommand("order", "➕ Оформить заказ"),
+            BotCommand("faq", "❓ FAQ"),
+            BotCommand("status", "🔍 Статус заказа"),
             BotCommand("services", "📋 Услуги и цены"),
             BotCommand("contact", "📞 Контакты"),
             BotCommand("help", "❓ Справка"),
