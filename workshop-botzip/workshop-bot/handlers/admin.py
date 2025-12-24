@@ -475,10 +475,12 @@ async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         keyboard = []
         
         for order in orders[:10]:
+            from handlers.orders import format_order_id
             service_name = SERVICE_NAMES.get(order.service_type, order.service_type or 'Услуга')
             phone = order.client_phone or "📲 TG"
-            text += f"#{order.id} • {service_name}\n👤 {order.client_name or 'Аноним'} | {phone}\n\n"
-            keyboard.append([InlineKeyboardButton(f"📦 Заказ #{order.id}", callback_data=f"admin_view_{order.id}")])
+            formatted_id = format_order_id(order.id, order.created_at)
+            text += f"{formatted_id} • {service_name}\n👤 {order.client_name or 'Аноним'} | {phone}\n\n"
+            keyboard.append([InlineKeyboardButton(f"📦 {formatted_id}", callback_data=f"admin_view_{order.id}")])
         
         keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data="admin_back_menu")])
         
@@ -503,6 +505,7 @@ async def admin_view_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await query.answer("Заказ не найден", show_alert=True)
         return
     
+    from handlers.orders import format_order_id
     service_name = SERVICE_NAMES.get(order.service_type, order.service_type or 'Услуга')
     status_text = {
         'new': '🆕 Новый',
@@ -512,10 +515,11 @@ async def admin_view_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         'cancelled': '❌ Отменён'
     }.get(order.status, order.status)
     
+    formatted_order_id = format_order_id(order.id, order.created_at)
     phone_display = order.client_phone if order.client_phone and order.client_phone != "Telegram" else "📲 Telegram"
     
     text = (
-        f"📦 *Заказ #{order.id}*\n\n"
+        f"📦 *{formatted_order_id}*\n\n"
         f"🏷 *Услуга:* {service_name}\n"
         f"👤 *Клиент:* {order.client_name or 'Не указано'}\n"
         f"📞 *Телефон:* {phone_display}\n"
@@ -542,8 +546,7 @@ async def admin_view_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         ])
     
     keyboard.append([
-        InlineKeyboardButton(f"✉️ Написать", url=f"tg://user?id={order.user_id}"),
-        InlineKeyboardButton(f"🧾 Квитанция", callback_data=f"resend_receipt_{order.id}")
+        InlineKeyboardButton(f"✉️ Написать", url=f"tg://user?id={order.user_id}")
     ])
     
     back_status = {

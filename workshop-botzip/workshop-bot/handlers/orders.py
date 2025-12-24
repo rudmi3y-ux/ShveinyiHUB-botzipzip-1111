@@ -39,6 +39,28 @@ def is_workday():
     """Проверить, рабочий ли сегодня день (по московскому времени)"""
     return WORK_HOURS.get(datetime.now(MOSCOW_TZ).weekday()) is not None
 
+def format_order_id(order_id, created_at=None):
+    """Форматировать номер заказа в виде дд-мм.гг-#id
+    
+    Args:
+        order_id: ID заказа
+        created_at: дата создания заказа (если None, использует текущую дату)
+    
+    Returns:
+        Форматированный номер в виде "24-12.25-#1"
+    """
+    if created_at:
+        date_obj = created_at if isinstance(created_at, datetime) else datetime.fromisoformat(str(created_at))
+    else:
+        date_obj = datetime.now(MOSCOW_TZ)
+    
+    # Форматируем как дд-мм.гг
+    day = date_obj.strftime('%d')
+    month = date_obj.strftime('%m')
+    year = date_obj.strftime('%y')
+    
+    return f"{day}-{month}.{year}-#{order_id}"
+
 CONFIRMATION_PHRASES_WORKDAY = [
     "Супер! Заказчик нашёлся! 🎉\nЖдём-поджидаем вас сегодня! Кстати, мы тут не скучаем — работаем {hours}.\nПриходите, покажем, как можно починить почти всё!",
     "Отлично, мы уже готовимся к вашему визиту! ❤️\nСегодня ждём вас {hours} — специально выделили время на консультацию.\nРасскажете историю вещи, а мы найдём для неё лучшее решение!",
@@ -351,9 +373,10 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     else:
         confirmation_phrase = random.choice(CONFIRMATION_PHRASES_WEEKEND)
     
+    formatted_order_id = format_order_id(order_id)
     await update.callback_query.edit_message_text(
         text=f"✅ *Заказ принят!*\n\n"
-        f"📋 *Номер вашего заказа: #{order_id}*\n\n"
+        f"📋 *Номер вашего заказа: {formatted_order_id}*\n\n"
         f"{confirmation_phrase}\n\n"
         f"📍 {WORKSHOP_ADDRESS}\n"
         f"📞 {WORKSHOP_PHONE}",
@@ -362,7 +385,7 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     
     await context.bot.send_message(
         chat_id=user_id,
-        text=f"✅ Ваш заказ №{order_id} успешно принят!\n\n"
+        text=f"✅ Ваш заказ {formatted_order_id} успешно принят!\n\n"
               f"Спасибо за заказ. Скоро мы свяжемся с вами по телефону {context.user_data.get('client_phone', 'номер')} для уточнения деталей."
     )
     
@@ -408,12 +431,13 @@ async def notify_admins(context: ContextTypes.DEFAULT_TYPE, order_id: int, order
         
         now = datetime.now(MOSCOW_TZ)
         date_str = now.strftime("%d.%m.%Y %H:%M")
+        formatted_order_id = format_order_id(order_id, now)
         
         service_key = order_data.get('service', 'unknown')
         service_name = SERVICE_NAMES.get(service_key, order_data.get('service_name', service_key))
         
         message = (
-            f"📁 *Заказ #{order_id}*\n\n"
+            f"📁 *Заказ {formatted_order_id}*\n\n"
             f"◆ Услуга: {service_name}\n"
             f"◆ Клиент: {order_data.get('client_name', 'Не указано')}\n"
             f"◆ Телефон: {order_data.get('client_phone', 'Не указан')}\n"
@@ -506,14 +530,17 @@ async def handle_order_status_change(update: Update, context: ContextTypes.DEFAU
     order = get_order(order_id)
     if order and new_status not in ("cancelled", "issued"):
         try:
+            formatted_id = format_order_id(order_id, order.created_at)
             client_message = {
                 "in_progress": (
                     f"✂️ Ваша вещь уже в работе!\n\n"
+                    f"Заказ: {formatted_id}\n"
                     f"Делаем всё качественно и аккуратно. "
                     f"Мы свяжемся с вами, когда заказ будет готов."
                 ),
                 "completed": (
                     f"🎉 Заказ выполнен!\n\n"
+                    f"Заказ: {formatted_id}\n\n"
                     f"Ждём вас на выдачу в удобное время.\n\n"
                     f"📍 {WORKSHOP_ADDRESS}\n"
                     f"⏰ Пн-Чт: 10:00-19:50, Пт: 10:00-19:00, Сб: 10:00-17:00\n"
@@ -538,7 +565,8 @@ async def handle_order_status_change(update: Update, context: ContextTypes.DEFAU
         [InlineKeyboardButton("◀️ К списку заказов", callback_data=next_list)]
     ])
     
-    new_text = f"✅ Заказ #{order_id} обновлён\n\n{status_text}\n\n👤 Обработал: @{admin_name}"
+    formatted_id = format_order_id(order_id, order.created_at if order else None)
+    new_text = f"✅ Заказ {formatted_id} обновлён\n\n{status_text}\n\n👤 Обработал: @{admin_name}"
     
     try:
         if update.callback_query.message.photo:
