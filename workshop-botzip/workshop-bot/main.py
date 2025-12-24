@@ -155,17 +155,20 @@ async def callback_check_status(update, context):
     if not orders:
         text = "🔍 У вас нет заказов.\n\nПозвоните нам: " + WORKSHOP_INFO['phone']
     else:
+        from handlers.orders import format_order_id
         text = "🔍 *Ваши заказы:*\n\n"
         status_map = {
             'new': '🆕 Новый',
             'in_progress': '🔄 В работе',
             'completed': '✅ Готов',
+            'issued': '📤 Выдан',
             'cancelled': '❌ Отменён'
         }
         for order in orders[:5]:
             status = status_map.get(str(order.status), str(order.status))
             desc = str(order.description) if order.description else 'Услуга'
-            text += f"*#{int(order.id)}* - {status}\n{desc}\n\n"
+            formatted_id = format_order_id(int(order.id), order.created_at)
+            text += f"*{formatted_id}* - {status}\n{desc}\n\n"
     
     await update.callback_query.edit_message_text(
         text=text,
