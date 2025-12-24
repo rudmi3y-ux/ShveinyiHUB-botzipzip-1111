@@ -18,10 +18,6 @@ author = "agent"
 task = "workflow.run"
 args = "telegram_bot"
 
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "web_interface"
-
 [[workflows.workflow]]
 name = "telegram_bot"
 author = "agent"
@@ -34,44 +30,6 @@ waitForPort = 8080
 [workflows.workflow.metadata]
 outputType = "console"
 
-[[workflows.workflow]]
-name = "Install Dependencies"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pip install -r workshop-botzip/workshop-bot/requirements.txt"
-
-
-[[workflows.workflow]]
-name = "web_interface"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-args = "cd workshop-botzip/workshop-bot && gunicorn --bind 0.0.0.0:5000 --timeout 120 --workers 2 webapp.app:app"waitForPort = 5000
-
-task = "shell.exec"
-[workflows.workflow.metadata]
-outputType = "webview"
-
-[[ports]]
-localPort = 5000
-externalPort = 5000
-
 [[ports]]
 localPort = 8080
 externalPort = 8080
-
-[userenv]
-
-[userenv.shared]
-ADMIN_PASSWORD = "2154"
-ADMIN_ID = "8290911386"
-
-[deployment]
-run = [
-  "sh",
-  "-c",
-  "bash -c 'cd workshop-botzip/workshop-bot && python run_services.py'",
-]
-deploymentTarget = "cloudrun"
