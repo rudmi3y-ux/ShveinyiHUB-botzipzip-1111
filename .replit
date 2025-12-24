@@ -35,14 +35,22 @@ waitForPort = 8080
 outputType = "console"
 
 [[workflows.workflow]]
-name = "web_interface"
+name = "Install Dependencies"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd workshop-botzip/workshop-bot && python -m flask --app webapp.app run --host 0.0.0.0 --port 5000"
-waitForPort = 5000
+args = "pip install -r workshop-botzip/workshop-bot/requirements.txt"
 
+
+[[workflows.workflow]]
+name = "web_interface"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+args = "cd workshop-botzip/workshop-bot && gunicorn --bind 0.0.0.0:5000 --timeout 120 --workers 2 webapp.app:app"waitForPort = 5000
+
+task = "shell.exec"
 [workflows.workflow.metadata]
 outputType = "webview"
 
@@ -59,3 +67,11 @@ externalPort = 8080
 [userenv.shared]
 ADMIN_PASSWORD = "2154"
 ADMIN_ID = "8290911386"
+
+[deployment]
+run = [
+  "sh",
+  "-c",
+  "bash -c 'cd workshop-botzip/workshop-bot && python run_services.py'",
+]
+deploymentTarget = "cloudrun"
