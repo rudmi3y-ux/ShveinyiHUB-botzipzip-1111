@@ -252,6 +252,23 @@ async def set_admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     try:
         new_admin_id = int(context.args[0])
         set_admin(new_admin_id, True)
+        
+        # Автоматически отправляем админ-панель новому админу
+        try:
+            stats = get_statistics()
+            await context.bot.send_message(
+                chat_id=new_admin_id,
+                text=(
+                    "🎉 *Вы назначены администратором!*\n\n"
+                    "Теперь вам доступна админ-панель для управления заказами.\n"
+                    "Вы можете вызвать её командой /admin или через меню."
+                ),
+                reply_markup=get_admin_menu_keyboard(stats),
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            logger.error(f"Could not send notification to new admin {new_admin_id}: {e}")
+            
         await update.message.reply_text(f"✅ Пользователь {new_admin_id} добавлен как админ.")
     except ValueError:
         await update.message.reply_text("❌ Неверный ID пользователя.")
