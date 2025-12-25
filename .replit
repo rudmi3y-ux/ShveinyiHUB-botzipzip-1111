@@ -18,6 +18,10 @@ author = "agent"
 task = "workflow.run"
 args = "telegram_bot"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "app_services"
+
 [[workflows.workflow]]
 name = "telegram_bot"
 author = "agent"
@@ -29,6 +33,22 @@ waitForPort = 8080
 
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow]]
+name = "app_services"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd workshop-botzip/workshop-bot && python run_services.py"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
 
 [[ports]]
 localPort = 8080
