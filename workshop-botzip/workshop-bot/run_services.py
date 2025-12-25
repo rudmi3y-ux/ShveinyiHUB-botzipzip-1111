@@ -85,7 +85,7 @@ if __name__ == "__main__":
     print("\n🌐 Запуск Web Interface...")
     web_thread = threading.Thread(
         target=run_service,
-        args=("Web Interface", "python -m gunicorn --bind 0.0.0.0:5000 --timeout 120 --workers 2 --keep-alive 75 --chdir webapp app:app"),
+        args=("Web Interface", "python -m gunicorn --bind 0.0.0.0:5000 --timeout 120 --workers 2 --keep-alive 75 --chdir . webapp:app"),
         daemon=False
     )
     web_thread.start()
