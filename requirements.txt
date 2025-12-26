@@ -17,3 +17,4 @@ requests
 sqlalchemy
 python-telegram-bot
 telegram
+python-telegram-bot==20.7
