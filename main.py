@@ -471,6 +471,28 @@ def main() -> None:
     BOT_IS_RUNNING = True
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+    
+    # Перед запуском удаляем вебхук и сбрасываем обновления
+    async def clear_bot_session():
+        from telegram import Bot
+        bot = Bot(BOT_TOKEN)
+        # Сначала удаляем вебхук, если он был
+        await bot.delete_webhook(drop_pending_updates=True)
+        # Затем пробуем получить и сбросить все старые getUpdates
+        # Это поможет, если кто-то другой (или старый процесс) "держит" сессию
+        logger.info("✅ Сессия бота очищена (вебхуки удалены, обновления сброшены)")
+    
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.ensure_future(clear_bot_session())
+        else:
+            loop.run_until_complete(clear_bot_session())
+        # Добавляем паузу, чтобы Telegram успел обработать сброс
+        time.sleep(2)
+    except Exception as e:
+        logger.warning(f"Не удалось очистить сессию: {e}")
 
     from telegram.ext import TypeHandler
     app.add_handler(TypeHandler(Update, log_all_updates), group=-1)

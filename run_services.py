@@ -32,6 +32,7 @@ def run_services():
 
     # 3. Запуск Telegram бота
     logger.info("Запуск Telegram бота...")
+    time.sleep(10)  # Увеличенная пауза для гарантированного закрытия старых соединений
     bot_process = subprocess.Popen(
         [sys.executable, "main.py"],
         cwd=base_dir
