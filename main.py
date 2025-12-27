@@ -1,11 +1,39 @@
 #!/usr/bin/env python3
 import os
-import logging
+import sys
 import asyncio
 import time
 import threading
 import json
+import socket
+import atexit
+import logging
 from http.server import HTTPServer, BaseHTTPRequestHandler
+
+# =========== СИСТЕМА БЛОКИРОВКИ ===========
+def create_lock():
+    """Создание жесткой блокировки через порт"""
+    lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        # Пытаемся занять порт 48975 (случайный порт для блокировки)
+        lock_socket.bind(('localhost', 48975))
+        return lock_socket
+    except socket.error:
+        print("❌ ОШИБКА: Другой экземпляр бота уже запущен!")
+        sys.exit(1)
+
+# Создаем блокировку
+_lock_socket = create_lock()
+
+def release_lock():
+    """Освобождение блокировки при завершении"""
+    try:
+        _lock_socket.close()
+    except:
+        pass
+
+atexit.register(release_lock)
+# ==========================================
 from datetime import datetime
 from dotenv import load_dotenv
 from telegram import Update, MenuButtonCommands, BotCommand
