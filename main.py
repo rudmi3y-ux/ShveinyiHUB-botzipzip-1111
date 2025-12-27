@@ -477,10 +477,15 @@ def main() -> None:
         from telegram import Bot
         bot = Bot(BOT_TOKEN)
         # Сначала удаляем вебхук, если он был
-        await bot.delete_webhook(drop_pending_updates=True)
-        # Затем пробуем получить и сбросить все старые getUpdates
-        # Это поможет, если кто-то другой (или старый процесс) "держит" сессию
-        logger.info("✅ Сессия бота очищена (вебхуки удалены, обновления сброшены)")
+        try:
+            await bot.delete_webhook(drop_pending_updates=True)
+            logger.info("✅ Вебхуки удалены, обновления сброшены")
+        except Exception as e:
+            logger.warning(f"Ошибка при удалении вебхука: {e}")
+            
+        # Пауза для того чтобы Telegram успел закрыть сессию
+        await asyncio.sleep(5)
+        logger.info("✅ Сессия бота очищена")
     
     import asyncio
     try:
