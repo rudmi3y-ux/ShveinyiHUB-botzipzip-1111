@@ -11,7 +11,7 @@ import re
 
 logger = logging.getLogger(__name__)
 
-YANDEX_REVIEWS_URL = "https://yandex.ru/maps/-/CHE~6LAS"
+YANDEX_REVIEWS_URL = "https://yandex.ru/maps/org/shveyny_hub/1233246900?si=qazrp3fnzwhkjgancr36aquutw"
 
 ENTER_COMMENT = 0
 
