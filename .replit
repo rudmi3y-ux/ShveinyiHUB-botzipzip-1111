@@ -39,5 +39,5 @@ outputType = "webview"
 channel = "stable-25_05"
 
 [deployment]
-deploymentTarget = "autoscale"
-run = ["python", "run_services.py"]
+deploymentTarget = "vm"
+run = ["python3", "run_services.py"]
