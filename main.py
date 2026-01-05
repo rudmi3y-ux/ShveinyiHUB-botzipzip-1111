@@ -10,6 +10,7 @@ import atexit
 import logging
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
+
 # =========== СИСТЕМА БЛОКИРОВКИ ===========
 def create_lock():
     """Создание жесткой блокировки через порт"""
@@ -22,8 +23,10 @@ def create_lock():
         print("❌ ОШИБКА: Другой экземпляр бота уже запущен!")
         sys.exit(1)
 
+
 # Создаем блокировку
 _lock_socket = create_lock()
+
 
 def release_lock():
     """Освобождение блокировки при завершении"""
@@ -32,9 +35,9 @@ def release_lock():
     except:
         pass
 
+
 atexit.register(release_lock)
 # ==========================================
-from datetime import datetime
 from dotenv import load_dotenv
 from telegram import Update, MenuButtonCommands, BotCommand
 from telegram.ext import (ApplicationBuilder, CommandHandler,
@@ -77,7 +80,7 @@ def start_health_server(port=8080):
     server = HTTPServer(('0.0.0.0', port), HealthHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    logging.info(f"✅ Health check сервер запущен на порту {port}")
+    logging.info(f" Health check сервер запущен на порту {port}")
 
 
 from handlers import commands, messages, admin
@@ -88,14 +91,10 @@ from handlers.orders import (
     skip_phone_handler, handle_order_status_change, SELECT_SERVICE, SEND_PHOTO,
     ENTER_NAME, ENTER_PHONE, CONFIRM_ORDER)
 from handlers.reviews import get_review_conversation_handler, request_review
-from keyboards import (get_main_menu, get_prices_menu, get_services_menu,
-                       get_faq_menu, get_back_button, remove_keyboard,
-                       get_ai_response_keyboard, get_admin_main_menu,
-                       get_admin_orders_submenu, get_admin_back_menu)
-from utils.database import init_db, get_user_orders, add_user, get_orders_pending_feedback, mark_feedback_requested
-from utils.knowledge_loader import knowledge
-from utils.anti_spam import anti_spam
-from utils.prices import format_prices_text, get_all_categories, import_prices_data
+from keyboards import (get_main_menu, get_prices_menu, get_faq_menu,
+                       get_back_button, get_admin_main_menu)
+from utils.database import init_db, get_user_orders, get_orders_pending_feedback, mark_feedback_requested
+from utils.prices import format_prices_text, import_prices_data
 
 load_dotenv()
 
@@ -192,7 +191,7 @@ async def callback_check_status(update, context):
         status_map = {
             'new': '🆕 Новый',
             'in_progress': '🔄 В работе',
-            'completed': '✅ Готов',
+            'completed': ' Готов',
             'issued': '📤 Выдан',
             'cancelled': '❌ Отменён'
         }
@@ -493,13 +492,13 @@ def main() -> None:
 
     init_db()
     import_prices_data()
-    logger.info("✅ База данных инициализирована")
+    logger.info(" База данных инициализирована")
     logger.info("💰 Цены загружены из базы данных")
 
     BOT_IS_RUNNING = True
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-    
+
     # Перед запуском удаляем вебхук и сбрасываем обновления
     async def clear_bot_session():
         from telegram import Bot
@@ -507,15 +506,14 @@ def main() -> None:
         # Сначала удаляем вебхук, если он был
         try:
             await bot.delete_webhook(drop_pending_updates=True)
-            logger.info("✅ Вебхуки удалены, обновления сброшены")
+            logger.info(" Вебхуки удалены, обновления сброшены")
         except Exception as e:
             logger.warning(f"Ошибка при удалении вебхука: {e}")
-            
+
         # Пауза для того чтобы Telegram успел закрыть сессию
         await asyncio.sleep(5)
-        logger.info("✅ Сессия бота очищена")
-    
-    import asyncio
+        logger.info(" Сессия бота очищена")
+
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
@@ -677,7 +675,7 @@ def main() -> None:
         ])
         await application.bot.set_chat_menu_button(
             menu_button=MenuButtonCommands())
-        logger.info("✅ Кнопка меню настроена")
+        logger.info(" Кнопка меню настроена")
 
         import asyncio
 
@@ -706,7 +704,7 @@ def main() -> None:
                 await asyncio.sleep(3600)  # каждый час
 
         asyncio.create_task(periodic_review_check())
-        logger.info("✅ Фоновая задача для отзывов запущена")
+        logger.info(" Фоновая задача для отзывов запущена")
 
     app.post_init = post_init
 

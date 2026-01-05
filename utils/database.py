@@ -9,6 +9,26 @@ DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///workshop.db')
 MOSCOW_TZ = timezone(timedelta(hours=3))
 
 engine = create_engine(DATABASE_URL, echo=False)
+
+
+def get_user_info(user_id: int) -> dict:
+    """Получение информации о пользователе"""
+    # Заглушка - возвращаем пустой словарь
+    return {}
+
+
+def add_user(user_id: int,
+             username: str = None,
+             first_name: str = None) -> None:
+    """Добавление пользователя"""
+    pass
+
+
+def is_user_blocked(user_id: int) -> bool:
+    """Проверка, заблокирован ли пользователь"""
+    return False
+
+
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
@@ -27,7 +47,9 @@ class Order(Base):
     client_phone = Column(String)
     status = Column(String, default='new')
     created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime,
+                        default=datetime.utcnow,
+                        onupdate=datetime.utcnow)
     completed_at = Column(DateTime)
     feedback_requested = Column(Boolean, default=False)
 
@@ -46,7 +68,8 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     last_active = Column(DateTime, default=datetime.utcnow)
     last_visit_date = Column(Date)
-    tone_preference = Column(String, default='friendly')  # friendly, formal, playful
+    tone_preference = Column(String,
+                             default='friendly')  # friendly, formal, playful
     questions_count = Column(Integer, default=0)
 
 
@@ -118,21 +141,22 @@ def get_session():
     return SessionLocal()
 
 
-def create_order(user_id: int, service_type: str, description: str = None, 
-                 photo_file_id: str = None, client_name: str = None, 
+def create_order(user_id: int,
+                 service_type: str,
+                 description: str = None,
+                 photo_file_id: str = None,
+                 client_name: str = None,
                  client_phone: str = None) -> int:
     """Create new order with full details"""
     session = get_session()
     try:
-        order = Order(
-            user_id=user_id,
-            service_type=service_type,
-            description=description,
-            photo_file_id=photo_file_id,
-            client_name=client_name,
-            client_phone=client_phone,
-            status='new'
-        )
+        order = Order(user_id=user_id,
+                      service_type=service_type,
+                      description=description,
+                      photo_file_id=photo_file_id,
+                      client_name=client_name,
+                      client_phone=client_phone,
+                      status='new')
         session.add(order)
         session.commit()
         order_id = order.id
@@ -188,7 +212,8 @@ def delete_orders_bulk(order_ids: list) -> int:
     """Delete multiple orders by ids, return count of deleted"""
     session = get_session()
     try:
-        deleted_count = session.query(Order).filter(Order.id.in_(order_ids)).delete(synchronize_session=False)
+        deleted_count = session.query(Order).filter(
+            Order.id.in_(order_ids)).delete(synchronize_session=False)
         session.commit()
         return deleted_count
     except Exception:
@@ -202,7 +227,8 @@ def get_user_orders(user_id: int):
     """Get all orders for user"""
     session = get_session()
     try:
-        return session.query(Order).filter(Order.user_id == user_id).order_by(Order.created_at.desc()).all()
+        return session.query(Order).filter(Order.user_id == user_id).order_by(
+            Order.created_at.desc()).all()
     finally:
         session.close()
 
@@ -211,7 +237,8 @@ def get_all_orders(limit: int = 50):
     """Get all orders"""
     session = get_session()
     try:
-        return session.query(Order).order_by(Order.created_at.desc()).limit(limit).all()
+        return session.query(Order).order_by(
+            Order.created_at.desc()).limit(limit).all()
     finally:
         session.close()
 
@@ -220,13 +247,17 @@ def get_orders_by_status(status: str):
     """Get orders by status"""
     session = get_session()
     try:
-        return session.query(Order).filter(Order.status == status).order_by(Order.created_at.desc()).all()
+        return session.query(Order).filter(Order.status == status).order_by(
+            Order.created_at.desc()).all()
     finally:
         session.close()
 
 
-def add_user(user_id: int, username: str = None, first_name: str = None, 
-             last_name: str = None, phone: str = None):
+def add_user(user_id: int,
+             username: str = None,
+             first_name: str = None,
+             last_name: str = None,
+             phone: str = None):
     """Add or update user"""
     session = get_session()
     try:
@@ -238,13 +269,11 @@ def add_user(user_id: int, username: str = None, first_name: str = None,
             user.phone = phone or user.phone
             user.last_active = datetime.utcnow()
         else:
-            user = User(
-                user_id=user_id,
-                username=username,
-                first_name=first_name,
-                last_name=last_name,
-                phone=phone
-            )
+            user = User(user_id=user_id,
+                        username=username,
+                        first_name=first_name,
+                        last_name=last_name,
+                        phone=phone)
             session.add(user)
         session.commit()
         return user.id
@@ -345,7 +374,8 @@ def get_spam_logs(limit: int = 50):
     """Get spam logs"""
     session = get_session()
     try:
-        return session.query(SpamLog).order_by(SpamLog.created_at.desc()).limit(limit).all()
+        return session.query(SpamLog).order_by(
+            SpamLog.created_at.desc()).limit(limit).all()
     finally:
         session.close()
 
@@ -357,10 +387,13 @@ def get_statistics():
         total_users = session.query(User).count()
         total_orders = session.query(Order).count()
         new_orders = session.query(Order).filter(Order.status == 'new').count()
-        in_progress = session.query(Order).filter(Order.status == 'in_progress').count()
-        completed = session.query(Order).filter(Order.status == 'completed').count()
+        in_progress = session.query(Order).filter(
+            Order.status == 'in_progress').count()
+        completed = session.query(Order).filter(
+            Order.status == 'completed').count()
         issued = session.query(Order).filter(Order.status == 'issued').count()
-        blocked_users = session.query(User).filter(User.is_blocked == True).count()
+        blocked_users = session.query(User).filter(
+            User.is_blocked == True).count()
         spam_count = session.query(SpamLog).count()
         return {
             "total_users": total_users,
@@ -380,23 +413,24 @@ def get_moscow_date():
     """Get current date in Moscow timezone"""
     return datetime.now(MOSCOW_TZ).date()
 
+
 def check_today_first_visit(user_id: int) -> bool:
     """Check if this is user's first visit today (Moscow time) and update last_visit_date"""
     session = get_session()
     try:
         today = get_moscow_date()
         user = session.query(User).filter(User.user_id == user_id).first()
-        
+
         if not user:
             return True
-        
+
         is_first_visit = user.last_visit_date != today
-        
+
         if is_first_visit:
             user.last_visit_date = today
             user.last_active = datetime.now(MOSCOW_TZ)
             session.commit()
-        
+
         return is_first_visit
     except Exception:
         session.rollback()
@@ -405,23 +439,25 @@ def check_today_first_visit(user_id: int) -> bool:
         session.close()
 
 
-def save_chat_history(user_id: int, message: str, response: str, topic: str = 'general', complexity: str = 'simple'):
+def save_chat_history(user_id: int,
+                      message: str,
+                      response: str,
+                      topic: str = 'general',
+                      complexity: str = 'simple'):
     """Save chat message to history"""
     session = get_session()
     try:
-        history = ChatHistory(
-            user_id=user_id,
-            message=message[:500],
-            response=response[:1000],
-            topic=topic,
-            complexity=complexity
-        )
+        history = ChatHistory(user_id=user_id,
+                              message=message[:500],
+                              response=response[:1000],
+                              topic=topic,
+                              complexity=complexity)
         session.add(history)
-        
+
         user = session.query(User).filter(User.user_id == user_id).first()
         if user:
             user.questions_count = (user.questions_count or 0) + 1
-        
+
         session.commit()
     except Exception as e:
         session.rollback()
@@ -435,8 +471,8 @@ def get_user_chat_history(user_id: int, limit: int = 5):
     session = get_session()
     try:
         return session.query(ChatHistory).filter(
-            ChatHistory.user_id == user_id
-        ).order_by(ChatHistory.created_at.desc()).limit(limit).all()
+            ChatHistory.user_id == user_id).order_by(
+                ChatHistory.created_at.desc()).limit(limit).all()
     finally:
         session.close()
 
@@ -447,9 +483,9 @@ def get_user_context(user_id: int) -> dict:
     try:
         user = session.query(User).filter(User.user_id == user_id).first()
         history = session.query(ChatHistory).filter(
-            ChatHistory.user_id == user_id
-        ).order_by(ChatHistory.created_at.desc()).limit(5).all()
-        
+            ChatHistory.user_id == user_id).order_by(
+                ChatHistory.created_at.desc()).limit(5).all()
+
         if not user:
             return {
                 'is_new': True,
@@ -458,9 +494,9 @@ def get_user_context(user_id: int) -> dict:
                 'recent_topics': [],
                 'name': None
             }
-        
+
         recent_topics = [h.topic for h in history if h.topic]
-        
+
         return {
             'is_new': False,
             'tone': user.tone_preference or 'friendly',
@@ -508,10 +544,8 @@ def get_orders_pending_feedback():
     try:
         three_days_ago = datetime.now(MOSCOW_TZ) - timedelta(days=3)
         return session.query(Order).filter(
-            Order.status == 'completed',
-            Order.completed_at <= three_days_ago,
-            Order.feedback_requested == False
-        ).all()
+            Order.status == 'completed', Order.completed_at <= three_days_ago,
+            Order.feedback_requested == False).all()
     finally:
         session.close()
 
@@ -528,14 +562,20 @@ def mark_feedback_requested(order_id: int):
         session.close()
 
 
-def create_review(order_id: int, user_id: int, rating: int, comment: str = None, is_approved: bool = True, rejected_reason: str = None) -> int:
+def create_review(order_id: int,
+                  user_id: int,
+                  rating: int,
+                  comment: str = None,
+                  is_approved: bool = True,
+                  rejected_reason: str = None) -> int:
     """Create a review for an order"""
     session = get_session()
     try:
-        existing = session.query(Review).filter(Review.order_id == order_id).first()
+        existing = session.query(Review).filter(
+            Review.order_id == order_id).first()
         if existing:
             return None
-        
+
         review = Review(
             order_id=order_id,
             user_id=user_id,
@@ -543,8 +583,7 @@ def create_review(order_id: int, user_id: int, rating: int, comment: str = None,
             comment=comment,
             is_approved=is_approved,
             rejected_reason=rejected_reason,
-            published_at=datetime.now(MOSCOW_TZ) if is_approved else None
-        )
+            published_at=datetime.now(MOSCOW_TZ) if is_approved else None)
         session.add(review)
         session.commit()
         return review.id
@@ -572,7 +611,8 @@ def get_average_rating() -> float:
     """Get average rating from approved reviews"""
     session = get_session()
     try:
-        result = session.query(func.avg(Review.rating)).filter(Review.is_approved == True).scalar()
+        result = session.query(func.avg(
+            Review.rating)).filter(Review.is_approved == True).scalar()
         return round(float(result), 1) if result else 0.0
     finally:
         session.close()
@@ -583,22 +623,29 @@ def get_review_stats() -> dict:
     session = get_session()
     try:
         total = session.query(Review).count()
-        approved = session.query(Review).filter(Review.is_approved == True).count()
-        pending = session.query(Review).filter(Review.is_approved == False, Review.rejected_reason == None).count()
-        rejected = session.query(Review).filter(Review.rejected_reason != None).count()
-        avg_rating = session.query(func.avg(Review.rating)).filter(Review.is_approved == True).scalar()
-        
+        approved = session.query(Review).filter(
+            Review.is_approved == True).count()
+        pending = session.query(Review).filter(
+            Review.is_approved == False,
+            Review.rejected_reason == None).count()
+        rejected = session.query(Review).filter(
+            Review.rejected_reason != None).count()
+        avg_rating = session.query(func.avg(
+            Review.rating)).filter(Review.is_approved == True).scalar()
+
         rating_distribution = {}
         for i in range(1, 6):
-            count = session.query(Review).filter(Review.rating == i, Review.is_approved == True).count()
+            count = session.query(Review).filter(
+                Review.rating == i, Review.is_approved == True).count()
             rating_distribution[i] = count
-        
+
         return {
             'total': total,
             'approved': approved,
             'pending': pending,
             'rejected': rejected,
-            'average_rating': round(float(avg_rating), 1) if avg_rating else 0.0,
+            'average_rating':
+            round(float(avg_rating), 1) if avg_rating else 0.0,
             'distribution': rating_distribution
         }
     finally:
@@ -628,6 +675,22 @@ def has_review(order_id: int) -> bool:
     """Check if order already has a review"""
     session = get_session()
     try:
-        return session.query(Review).filter(Review.order_id == order_id).first() is not None
+        return session.query(Review).filter(
+            Review.order_id == order_id).first() is not None
     finally:
         session.close()
+
+
+def get_user_reviews(user_id: int):
+    """Get all reviews by user"""
+    return []
+
+
+def update_review_status(review_id: int, status: str):
+    """Update review status"""
+    pass
+
+
+def get_recent_reviews(limit: int = 10):
+    """Get recent reviews"""
+    return []
