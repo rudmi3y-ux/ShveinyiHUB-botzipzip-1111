@@ -44,10 +44,7 @@ try:
 except Exception:
     ENV_ADMIN_ID = 0
 
-WEB_ADMIN_URL = os.getenv("WEB_ADMIN_URL") or os.getenv(
-    "REPLIT_DEV_DOMAIN") or ""
-if WEB_ADMIN_URL and not WEB_ADMIN_URL.startswith("http"):
-    WEB_ADMIN_URL = f"https://{WEB_ADMIN_URL}"
+WEB_ADMIN_URL = os.getenv("WEB_ADMIN_URL") or f"https://{os.getenv('REPLIT_DEV_DOMAIN')}" or ""
 
 
 def _get_web_admin_orders_url() -> str:
