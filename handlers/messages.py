@@ -79,16 +79,21 @@ async def handle_message(update: Update,
 
         # Получаем ответ от AI
         try:
-            response, needs_human = await get_ai_response(text, user_id)
-
-            # Формируем клавиатуру ответа
-            keyboard = get_ai_response_keyboard()
+            # Проверка на запрос отзыва
+            review_keywords = ['как оставить отзыв', 'где оставить отзыв', 'написать отзыв', 'оставить отзыв']
+            if any(keyword in text.lower() for keyword in review_keywords):
+                response = "Будем очень благодарны за ваш отзыв! Вы можете оставить его на Яндекс Картах по ссылке: https://yandex.ru/maps/org/shveynyy_hub/204285863268/"
+                keyboard = get_ai_response_keyboard()
+            else:
+                response, needs_human = await get_ai_response(text, user_id)
+                # Формируем клавиатуру ответа
+                keyboard = get_ai_response_keyboard()
 
             # Отправляем ответ
             await update.message.reply_text(
                 f"💭 {response}",
                 reply_markup=keyboard,
-                parse_mode="Markdown"  # Если AI возвращает разметку
+                parse_mode="Markdown"
             )
 
             # Логируем успешный ответ

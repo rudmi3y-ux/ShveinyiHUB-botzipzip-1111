@@ -9,7 +9,7 @@ from .database import get_user_context, save_chat_history
 
 logger = logging.getLogger(__name__)
 
-MAX_TOKENS = 150
+MAX_TOKENS = 100
 
 
 class GigaChatAPI:
