@@ -127,11 +127,18 @@ async def admin_stats(update: Update,
                 f"📤 Выдано: {stats.get('issued', 0)}\n"
                 f"🚫 Заблокировано: {stats.get('blocked_users', 0)}\n"
                 f"🛑 Спам-записей: {stats.get('spam_count', 0)}")
-        await update.effective_message.reply_text(text, parse_mode="Markdown")
+        
+        if update.callback_query:
+            await update.callback_query.edit_message_text(text, parse_mode="Markdown")
+        else:
+            await update.effective_message.reply_text(text, parse_mode="Markdown")
     except Exception:
         logger.exception("Ошибка при формировании статистики")
-        await update.effective_message.reply_text(
-            "❌ Ошибка при получении статистики.")
+        error_text = "❌ Ошибка при получении статистики."
+        if update.callback_query:
+            await update.callback_query.edit_message_text(error_text)
+        else:
+            await update.effective_message.reply_text(error_text)
 
 
 async def admin_orders(update: Update,
@@ -204,7 +211,10 @@ async def admin_users(update: Update,
     try:
         users = get_all_users()
         if not users:
-            await update.message.reply_text("👥 Пользователей нет.")
+            if update.callback_query:
+                await update.callback_query.edit_message_text("👥 Пользователей нет.")
+            else:
+                await update.message.reply_text("👥 Пользователей нет.")
             return
         text = f"👥 *Пользователи ({len(users)}):*\n\n"
         for u in users[:50]:
@@ -213,11 +223,18 @@ async def admin_users(update: Update,
             if u.phone:
                 line += f" ({u.phone})"
             text += line + "\n"
-        await update.message.reply_text(text, parse_mode="Markdown")
+        
+        if update.callback_query:
+            await update.callback_query.edit_message_text(text, parse_mode="Markdown")
+        else:
+            await update.message.reply_text(text, parse_mode="Markdown")
     except Exception:
         logger.exception("Ошибка при получении пользователей")
-        await update.message.reply_text("❌ Ошибка при получении пользователей."
-                                        )
+        error_text = "❌ Ошибка при получении пользователей."
+        if update.callback_query:
+            await update.callback_query.edit_message_text(error_text)
+        else:
+            await update.message.reply_text(error_text)
 
 
 async def admin_spam(update: Update,
