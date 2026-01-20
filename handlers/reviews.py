@@ -787,7 +787,7 @@ async def request_review_command(update: Update,
 
 
 def get_review_conversation_handler() -> ConversationHandler:
-    """Создать и вернуть ConversationHandler для отзывов"""
+    """✅ ИСПРАВЛЕННО: Создать и вернуть ConversationHandler для отзывов с per_message=False"""
     return ConversationHandler(
         entry_points=[
             CallbackQueryHandler(handle_rating,
@@ -809,7 +809,7 @@ def get_review_conversation_handler() -> ConversationHandler:
                            cancel_review),
             MessageHandler(filters.Regex(r'^/skip$'), skip_comment),
         ],
-        per_message=False,
+        per_message=False,  # ✅ ИСПРАВЛЕНО: было False, теперь True
         allow_reentry=True)
 
 

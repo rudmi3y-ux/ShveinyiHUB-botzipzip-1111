@@ -1,212 +1,724 @@
+"""
+Полнофункциональный обработчик админ-панели для бота.
+
+Реализовано:
+- команды: /admin, /stats, /orders, /neworders, /users, /spam, /broadcast, /setadmin
+- callback-обработчики админ-меню: admin_menu_callback, admin_view_order,
+  change_order_status, contact_client, open_web_admin
+- интеграция с utils.database и keyboards
+- безопасные проверки прав (ENV ADMIN_ID + флаг is_admin из БД)
+"""
 import os
 import logging
-from telegram import Update
+import asyncio
+from typing import List, Optional
+
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
-# Настройка логирования
+# Локальные зависимости (должны существовать в проекте)
+from utils.database import (
+    get_statistics,
+    get_all_orders,
+    get_all_users,
+    get_spam_logs,
+    set_admin,
+    is_admin,
+    get_orders_by_status,
+    get_order,
+    update_order_status,
+    get_admins,
+)
+from keyboards import (
+    get_admin_main_menu,
+    get_admin_orders_submenu,
+    get_admin_back_menu,
+    get_admin_order_detail_keyboard,
+)
+
 logger = logging.getLogger(__name__)
 
-# ID администратора из переменных окружения с обработкой ошибок
+# Конфигурация
 try:
-    ADMIN_ID = int(os.getenv('ADMIN_ID', '0'))
-    if ADMIN_ID == 0:
-        logger.warning(
-            "ADMIN_ID не установлен или равен 0. Админ-функции будут недоступны."
-        )
-except (ValueError, TypeError) as e:
-    ADMIN_ID = 0
-    logger.error(f"Ошибка при чтении ADMIN_ID: {e}. Установлено значение 0.")
+    ENV_ADMIN_ID = int(os.getenv("ADMIN_ID")) if os.getenv("ADMIN_ID") else 0
+except Exception:
+    ENV_ADMIN_ID = 0
+
+WEB_ADMIN_URL = os.getenv("WEB_ADMIN_URL") or os.getenv(
+    "REPLIT_DEV_DOMAIN") or ""
+if WEB_ADMIN_URL and not WEB_ADMIN_URL.startswith("http"):
+    WEB_ADMIN_URL = f"https://{WEB_ADMIN_URL}"
+
+
+def _get_web_admin_orders_url() -> str:
+    """Сформировать URL веб-админки для страницы заказов"""
+    if WEB_ADMIN_URL:
+        return f"{WEB_ADMIN_URL.rstrip('/')}/orders"
+    return ""
+
+
+def get_admin_ids() -> List[int]:
+    """Вернуть список admin ids (ENV + БД)"""
+    ids = []
+    if ENV_ADMIN_ID:
+        ids.append(int(ENV_ADMIN_ID))
+    try:
+        db_admins = get_admins() if callable(get_admins) else []
+        for a in db_admins:
+            try:
+                ids.append(int(a.user_id))
+            except Exception:
+                pass
+    except Exception:
+        logger.debug("get_admins not available or failed")
+    return ids
 
 
 def is_user_admin(user_id: int) -> bool:
-    """Проверка, является ли пользователь администратором"""
-    return user_id == ADMIN_ID and ADMIN_ID != 0
+    """Проверка прав администратора: ENV_ADMIN_ID или is_admin из БД"""
+    try:
+        if ENV_ADMIN_ID and int(user_id) == int(ENV_ADMIN_ID):
+            return True
+    except Exception:
+        pass
+    try:
+        return bool(is_admin(user_id))
+    except Exception:
+        # Если is_admin отсутствует/ошибка — fallback к ENV_ADMIN_ID
+        return False
 
 
-def get_admin_stats() -> dict:
-    """Получение статистики для администратора"""
-    # Здесь можно добавить реальную статистику из базы данных
-    stats = {
-        "users": 0,
-        "orders": 0,
-        "messages": 0,
-        "reviews": 0,
-        "active_commands": 0,
-        "active_sessions": 0
-    }
-    return stats
+# ---------------- Команды ----------------
 
 
-async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показ статистики администратора"""
-    if not is_user_admin(update.effective_user.id):
-        await update.message.reply_text("❌ У вас нет прав администратора.")
+async def admin_panel_command(update: Update,
+                              context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/admin — показать главное админ-меню"""
+    user_id = update.effective_user.id
+    if not is_user_admin(user_id):
+        await update.message.reply_text("⛔ У вас нет доступа к этой команде.")
         return
 
     try:
-        stats = get_admin_stats()
-        message = ("📊 **Статистика бота:**\n\n"
-                   f"👥 Пользователей: {stats['users']}\n"
-                   f"📦 Заказов: {stats['orders']}\n"
-                   f"💬 Сообщений: {stats['messages']}\n"
-                   f"⭐ Отзывов: {stats['reviews']}\n"
-                   f"⚡ Активных команд: {stats['active_commands']}\n"
-                   f"🔄 Активных сессий: {stats['active_sessions']}")
-        await update.message.reply_text(message, parse_mode='Markdown')
-
-    except Exception as e:
-        logger.error(f"Ошибка при получении статистики: {e}")
-        await update.message.reply_text(
-            "⚠️ Произошла ошибка при получении статистики.")
+        stats = get_statistics()
+    except Exception:
+        stats = {}
+    text = "📋 *Админ-панель*\n\nВыберите раздел для управления:"
+    await update.effective_message.reply_text(
+        text, reply_markup=get_admin_main_menu(), parse_mode="Markdown")
 
 
-async def admin_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Помощь по административным командам"""
-    if not is_user_admin(update.effective_user.id):
-        await update.message.reply_text("❌ У вас нет прав администратора.")
+async def admin_stats(update: Update,
+                      context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/stats — показать статистику"""
+    user_id = update.effective_user.id
+    if not is_user_admin(user_id):
+        await update.effective_message.reply_text("⛔ У вас нет доступа.")
         return
 
-    help_text = ("🛠 **Доступные административные команды:**\n\n"
-                 "/admin_stats - Показать статистику бота\n"
-                 "/admin_users - Управление пользователями\n"
-                 "/admin_orders - Управление заказами\n"
-                 "/admin_reviews - Управление отзывами\n"
-                 "/admin_broadcast - Рассылка сообщений пользователям\n"
-                 "/request_review - Запросить отзыв у пользователя\n\n"
-                 "📱 *Быстрые действия через меню:*\n"
-                 "• Просмотр новых заказов\n"
-                 "• Изменение статусов заказов\n"
-                 "• Модерация отзывов\n"
-                 "• Отправка уведомлений")
-    await update.message.reply_text(help_text, parse_mode='Markdown')
+    try:
+        stats = get_statistics()
+        text = ("📊 *Статистика бота*\n\n"
+                f"👥 Пользователей: {stats.get('total_users', 0)}\n"
+                f"📦 Всего заказов: {stats.get('total_orders', 0)}\n"
+                f"🆕 Новых: {stats.get('new_orders', 0)}\n"
+                f"🔄 В работе: {stats.get('in_progress', 0)}\n"
+                f"✅ Выполнено: {stats.get('completed', 0)}\n"
+                f"📤 Выдано: {stats.get('issued', 0)}\n"
+                f"🚫 Заблокировано: {stats.get('blocked_users', 0)}\n"
+                f"🛑 Спам-записей: {stats.get('spam_count', 0)}")
+        await update.effective_message.reply_text(text, parse_mode="Markdown")
+    except Exception:
+        logger.exception("Ошибка при формировании статистики")
+        await update.effective_message.reply_text(
+            "❌ Ошибка при получении статистики.")
 
 
-async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Рассылка сообщений всем пользователям"""
-    if not is_user_admin(update.effective_user.id):
-        await update.message.reply_text("❌ У вас нет прав администратора.")
+async def admin_orders(update: Update,
+                       context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/orders — вывести последние заказы"""
+    user_id = update.effective_user.id
+    if not is_user_admin(user_id):
+        await update.message.reply_text("⛔ У вас нет доступа.")
         return
 
-    if not context.args:
-        await update.message.reply_text(
-            "✉️ **Использование:** /admin_broadcast <текст сообщения>\n\n"
-            "**Пример:** /admin_broadcast Привет всем пользователям!\n\n"
-            "⚠️ *Внимание:* Сообщение будет отправлено всем пользователям бота.",
-            parse_mode="Markdown")
+    try:
+        orders = get_all_orders(limit=50)
+        if not orders:
+            await update.message.reply_text("📋 Заказов пока нет.")
+            return
+
+        from handlers.orders import format_order_id
+        text = "📋 *Последние заказы:*\n\n"
+        for order in orders[:20]:
+            status_emoji = {
+                "new": "🆕",
+                "in_progress": "🔄",
+                "completed": "✅",
+                "cancelled": "❌",
+                "issued": "📤",
+            }.get(order.status, "❓")
+            service_name = order.service_type or "Услуга"
+            formatted = format_order_id(order.id, order.created_at)
+            text += f"{status_emoji} *{formatted}* — {service_name}\n👤 {order.client_name or '—'} | 📞 {order.client_phone or '—'}\n\n"
+
+        await update.message.reply_text(text, parse_mode="Markdown")
+    except Exception:
+        logger.exception("Ошибка при получении заказов")
+        await update.message.reply_text("❌ Не удалось получить заказы.")
+
+
+async def admin_new_orders(update: Update,
+                           context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/neworders — показать новые заказы"""
+    user_id = update.effective_user.id
+    if not is_user_admin(user_id):
+        await update.message.reply_text("⛔ У вас нет доступа.")
         return
 
-    broadcast_message = " ".join(context.args)
+    try:
+        orders = get_orders_by_status("new")
+        if not orders:
+            await update.message.reply_text("✅ Новых заказов нет.")
+            return
+        from handlers.orders import format_order_id
+        text = f"🆕 *Новые заказы ({len(orders)}):*\n\n"
+        for order in orders[:20]:
+            formatted = format_order_id(order.id, order.created_at)
+            text += f"*{formatted}* — {order.client_name or '—'} | 📞 {order.client_phone or '—'}\n"
+        await update.message.reply_text(text, parse_mode="Markdown")
+    except Exception:
+        logger.exception("Ошибка при получении новых заказов")
+        await update.message.reply_text("❌ Ошибка при получении новых заказов."
+                                        )
 
-    # Здесь будет логика рассылки пользователям
-    # Нужно получить список всех пользователей из БД
 
+async def admin_users(update: Update,
+                      context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/users — список пользователей"""
+    user_id = update.effective_user.id
+    if not is_user_admin(user_id):
+        await update.message.reply_text("⛔ У вас нет доступа.")
+        return
+
+    try:
+        users = get_all_users()
+        if not users:
+            await update.message.reply_text("👥 Пользователей нет.")
+            return
+        text = f"👥 *Пользователи ({len(users)}):*\n\n"
+        for u in users[:50]:
+            name = u.first_name or u.username or f"ID: {u.user_id}"
+            line = f"• {name}"
+            if u.phone:
+                line += f" ({u.phone})"
+            text += line + "\n"
+        await update.message.reply_text(text, parse_mode="Markdown")
+    except Exception:
+        logger.exception("Ошибка при получении пользователей")
+        await update.message.reply_text("❌ Ошибка при получении пользователей."
+                                        )
+
+
+async def admin_spam(update: Update,
+                     context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/spam — показать журнал спама"""
+    user_id = update.effective_user.id
+    if not is_user_admin(user_id):
+        await update.message.reply_text("⛔ У вас нет доступа.")
+        return
+
+    try:
+        logs = get_spam_logs(limit=50)
+        if not logs:
+            await update.message.reply_text("🛑 Записей спама нет.")
+            return
+        text = "🛑 *Последние спам-записи:*\n\n"
+        for l in logs[:50]:
+            text += f"👤 {l.user_id} • {l.reason}\n{(l.message[:120] + '...') if l.message else ''}\n\n"
+        await update.message.reply_text(text, parse_mode="Markdown")
+    except Exception:
+        logger.exception("Ошибка при получении spam logs")
+        await update.message.reply_text("❌ Ошибка при получении журнала спама."
+                                        )
+
+
+# ---------------- Рассылка ----------------
+
+
+async def broadcast_start(update: Update,
+                          context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Запустить режим рассылки (следующий текст — рассылка)"""
+    user_id = update.effective_user.id
+    if not is_user_admin(user_id):
+        await update.message.reply_text("⛔ У вас нет доступа.")
+        return
+    context.user_data["broadcast_mode"] = True
     await update.message.reply_text(
-        f"📢 **Сообщение для рассылки:**\n\n{broadcast_message}\n\n"
-        f"❕ Функция рассылки находится в разработке.\n"
-        f"*В будущем здесь будет:*\n"
-        f"• Подтверждение перед отправкой\n"
-        f"• Прогресс отправки\n"
-        f"• Отчет о доставке",
-        parse_mode="Markdown")
-
-
-async def admin_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Управление пользователями"""
-    if not is_user_admin(update.effective_user.id):
-        await update.message.reply_text("❌ У вас нет прав администратора.")
-        return
-
-    # Заглушка для управления пользователями
-    await update.message.reply_text(
-        "👥 **Управление пользователями**\n\n"
-        "В разработке:\n"
-        "• Просмотр списка пользователей\n"
-        "• Поиск пользователей\n"
-        "• Статистика активности\n"
-        "• Блокировка/разблокировка\n\n"
-        "Пока используйте веб-панель для управления пользователями.",
-        parse_mode="Markdown")
+        "📣 Режим рассылки включён. Введите текст сообщения для рассылки. /cancel — отменить."
+    )
 
 
 async def broadcast_send(update: Update,
-                         context: ContextTypes.DEFAULT_TYPE,
-                         message_text: str = None):
-    """Отправка рассылки (вызывается из режима рассылки)"""
+                         context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Отправить рассылку всем пользователям"""
+    user_id = update.effective_user.id
+    if not is_user_admin(user_id):
+        return
+
+    if context.args:
+        message_text = " ".join(context.args)
+    elif update.message and update.message.text:
+        message_text = update.message.text
+    else:
+        await update.message.reply_text("❌ Нет текста для рассылки.")
+        return
+
     try:
-        if not is_user_admin(update.effective_user.id):
-            return
-
-        if not message_text:
-            if update.message and update.message.text:
-                message_text = update.message.text
-            else:
-                await update.message.reply_text("❌ Нет текста для рассылки.")
-                return
-
-        # Сбрасываем режим рассылки
-        if 'broadcast_mode' in context.user_data:
-            context.user_data.pop('broadcast_mode')
-
-        # Здесь будет реальная отправка всем пользователям
-        # Пока просто уведомляем администратора
+        users = get_all_users()
+    except Exception:
+        logger.exception("Ошибка при получении списка пользователей")
         await update.message.reply_text(
-            f"✅ **Готово к рассылке:**\n\n{message_text}\n\n"
-            f"*В разработке:*\n"
-            f"В будущем здесь будет отправка {0} пользователям.",
+            "❌ Не удалось получить список пользователей.")
+        return
+
+    sent = 0
+    failed = 0
+    delay = float(os.getenv("BROADCAST_DELAY", "0.05"))
+
+    await update.message.reply_text(
+        f"📤 Запускаю рассылку {len(users)} пользователям...")
+    for u in users:
+        try:
+            await context.bot.send_message(chat_id=int(u.user_id),
+                                           text=message_text,
+                                           parse_mode="Markdown")
+            sent += 1
+            if delay:
+                await asyncio.sleep(delay)
+        except Exception:
+            failed += 1
+            logger.exception(f"Не удалось отправить пользователю {u.user_id}")
+    await update.message.reply_text(
+        f"✅ Рассылка завершена. Отправлено: {sent}. Ошибок: {failed}.")
+
+
+# ---------------- Управление правами ----------------
+
+
+async def set_admin_command(update: Update,
+                            context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/setadmin <user_id> — назначить пользователя админом"""
+    user_id = update.effective_user.id
+    if not is_user_admin(user_id):
+        await update.message.reply_text("⛔ У вас нет доступа.")
+        return
+
+    if not context.args:
+        await update.message.reply_text("Использование: /setadmin <user_id>")
+        return
+
+    try:
+        new_admin_id = int(context.args[0])
+        ok = set_admin(new_admin_id, True)
+        if ok:
+            await update.message.reply_text(
+                f"✅ Пользователь {new_admin_id} назначен админом.")
+        else:
+            await update.message.reply_text(
+                "❌ Не удалось назначить администратора.")
+    except Exception:
+        logger.exception("Ошибка в set_admin_command")
+        await update.message.reply_text(
+            "❌ Ошибка при назначении администратора.")
+
+
+# ---------------- Callback-обработчики ----------------
+
+
+async def admin_menu_callback(update: Update,
+                              context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработка callback'ов из админ-меню"""
+    query = update.callback_query
+    await query.answer()
+    user_id = update.effective_user.id
+    if not is_user_admin(user_id):
+        await query.answer("⛔ Нет доступа", show_alert=True)
+        return
+
+    data = query.data or ""
+
+    if data == "admin_orders_menu":
+        await query.edit_message_text(
+            "📦 *Управление заказами*\n\nВыберите категорию заказов:",
+            reply_markup=get_admin_orders_submenu(),
             parse_mode="Markdown")
+        return
 
-        logger.info(
-            f"Администратор {update.effective_user.id} подготовил рассылку: {message_text[:50]}..."
-        )
+    if data == "admin_back_menu":
+        await query.edit_message_text(
+            "📋 *Админ-панель*\n\nВыберите раздел для управления:",
+            reply_markup=get_admin_main_menu(),
+            parse_mode="Markdown")
+        return
 
-    except Exception as e:
-        logger.error(f"Ошибка в broadcast_send: {e}")
-        await update.message.reply_text("❌ Ошибка при подготовке рассылки.")
+    if data == "admin_stats":
+        await admin_stats(update, context)
+        return
+
+    if data == "admin_clients":
+        await admin_users(update, context)
+        return
+
+    if data == "open_web_admin":
+        url = _get_web_admin_orders_url() or "Веб-панель недоступна"
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🌐 Открыть веб-админку", url=url)
+        ], [InlineKeyboardButton("◀️ Назад",
+                                 callback_data="admin_back_menu")]])
+        await query.edit_message_text(f"🌐 Веб-панель: {url}",
+                                      reply_markup=keyboard,
+                                      parse_mode="Markdown")
+        return
+
+    status_map = {
+        "admin_orders_new": ("new", "🆕 Новые заказы"),
+        "admin_orders_in_progress": ("in_progress", "🔄 Заказы в работе"),
+        "admin_orders_completed": ("completed", "✅ Готовые заказы"),
+        "admin_orders_issued": ("issued", "📤 Выданные заказы"),
+    }
+    if data in status_map:
+        status, title = status_map[data]
+        try:
+            orders = get_orders_by_status(status)
+            if not orders:
+                await query.edit_message_text(
+                    f"{title}\n\n📭 Заказов нет",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("◀️ Назад",
+                                             callback_data="admin_back_menu")
+                    ]]),
+                    parse_mode="Markdown")
+                return
+            from handlers.orders import format_order_id
+            text = f"*{title}* ({len(orders)}):\n\n"
+            keyboard = []
+            for order in orders[:20]:
+                formatted = format_order_id(order.id, order.created_at)
+                phone = order.client_phone or "📲 TG"
+                text += f"{formatted} • {order.client_name or 'Аноним'} | {phone}\n"
+                keyboard.append([
+                    InlineKeyboardButton(
+                        f"📦 {formatted}",
+                        callback_data=f"admin_view_{order.id}")
+                ])
+            keyboard.append([
+                InlineKeyboardButton("◀️ Назад",
+                                     callback_data="admin_back_menu")
+            ])
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode="Markdown")
+        except Exception:
+            logger.exception("Ошибка получения заказов по статусу")
+            await query.edit_message_text(
+                "❌ Ошибка при получении заказов.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("◀️ Назад",
+                                         callback_data="admin_back_menu")
+                ]]))
+        return
+
+    if data.startswith("admin_view_"):
+        await admin_view_order(update, context)
+        return
+
+    if data.startswith("status_") or data.startswith("statusin_"):
+        await change_order_status(update, context)
+        return
+
+    if data.startswith("contact_client_"):
+        await contact_client(update, context)
+        return
+
+    await query.answer("Неизвестное действие.", show_alert=True)
 
 
-# Функция для получения списка администраторов (может быть использована в других модулях)
-def get_admin_list() -> list:
-    """Получить список ID администраторов"""
-    admins = [ADMIN_ID] if ADMIN_ID != 0 else []
+async def admin_view_order(update: Update,
+                           context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Просмотр заказа с кнопками управления"""
+    query = update.callback_query
+    await query.answer()
+    user_id = update.effective_user.id
+    if not is_user_admin(user_id):
+        await query.answer("⛔ Нет доступа", show_alert=True)
+        return
 
-    # Здесь можно добавить получение дополнительных администраторов из БД
-    # Например: from utils.database import get_admins
+    try:
+        order_id = int(query.data.replace("admin_view_", ""))
+    except Exception:
+        await query.answer("❌ Неверный ID заказа", show_alert=True)
+        return
 
-    return admins
+    order = get_order(order_id)
+    if not order:
+        await query.answer("❌ Заказ не найден", show_alert=True)
+        return
 
+    from handlers.orders import format_order_id, WORKSHOP_ADDRESS, WORKSHOP_PHONE
+    formatted = format_order_id(order.id, order.created_at)
+    status_text = {
+        "new": "🆕 Новый",
+        "in_progress": "🔄 В работе",
+        "completed": "✅ Готов",
+        "issued": "📤 Выдан",
+        "cancelled": "❌ Отменён"
+    }.get(order.status, order.status)
 
-# Проверка прав администратора (декоратор для функций)
-def admin_required(func):
-    """Декоратор для проверки прав администратора"""
+    phone_display = order.client_phone if order.client_phone and order.client_phone != "Telegram" else "📲 Telegram"
+    text = (
+        f"📦 *{formatted}*\n\n"
+        f"🏷 *Услуга:* {order.service_type or 'Услуга'}\n"
+        f"👤 *Клиент:* {order.client_name or 'Не указано'}\n"
+        f"📞 *Телефон:* {phone_display}\n"
+        f"📊 *Статус:* {status_text}\n"
+        f"📅 *Дата:* {order.created_at.strftime('%d.%m.%Y %H:%M') if order.created_at else 'Н/Д'}\n"
+        f"📸 *Фото:* {'Да' if order.photo_file_id else 'Нет'}\n")
 
-    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE,
-                      *args, **kwargs):
-        if not is_user_admin(update.effective_user.id):
-            if update.callback_query:
-                await update.callback_query.answer(
-                    "❌ У вас нет прав администратора.", show_alert=True)
+    keyboard = get_admin_order_detail_keyboard(order.id, order.status)
+    try:
+        if getattr(query.message, "photo", None) or order.photo_file_id:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            if order.photo_file_id:
+                await context.bot.send_photo(chat_id=query.message.chat_id,
+                                             photo=order.photo_file_id,
+                                             caption=text,
+                                             reply_markup=keyboard,
+                                             parse_mode="Markdown")
             else:
-                await update.message.reply_text(
-                    "❌ У вас нет прав администратора.")
-            return
-        return await func(update, context, *args, **kwargs)
-
-    return wrapper
-
-
-async def admin_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin orders handler"""
-    await update.message.reply_text("📦 Заказы")
-
-
-async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin stats handler"""
-    await update.message.reply_text("📊 Статистика")
-
-    async def admin_new_orders(update: Update,
-                               context: ContextTypes.DEFAULT_TYPE):
-        """Admin new orders handler"""
-        await update.message.reply_text("📦 Новые заказы")
+                await context.bot.send_message(chat_id=query.message.chat_id,
+                                               text=text,
+                                               reply_markup=keyboard,
+                                               parse_mode="Markdown")
+        else:
+            await query.edit_message_text(text,
+                                          reply_markup=keyboard,
+                                          parse_mode="Markdown")
+    except Exception:
+        logger.exception("Ошибка при отображении заказа админом")
+        await query.edit_message_text(text,
+                                      reply_markup=keyboard,
+                                      parse_mode="Markdown")
 
 
-# Force reload
+async def change_order_status(update: Update,
+                              context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Изменение статуса заказа админом"""
+    query = update.callback_query
+    await query.answer()
+    user = update.effective_user
+    if not is_user_admin(user.id):
+        await query.answer("⛔ Нет доступа", show_alert=True)
+        return
+
+    data = query.data or ""
+    parts = data.split("_")
+    if len(parts) < 3:
+        await query.answer("❌ Неверный формат данных", show_alert=True)
+        return
+
+    try:
+        new_status = parts[1] if parts[0] == "status" else parts[1]
+        order_id = int(parts[-1])
+    except Exception:
+        await query.answer("❌ Неверный ID заказа", show_alert=True)
+        return
+
+    mapping = {
+        "in": "in_progress",
+        "inprogress": "in_progress",
+        "in_progress": "in_progress",
+        "completed": "completed",
+        "issued": "issued",
+        "cancelled": "cancelled",
+        "cancel": "cancelled",
+    }
+    new_status_norm = mapping.get(new_status, new_status)
+
+    try:
+        updated = update_order_status(order_id, new_status_norm)
+    except Exception:
+        logger.exception("Ошибка при обновлении статуса заказа в БД")
+        await query.answer("❌ Ошибка при обновлении статуса", show_alert=True)
+        return
+
+    if not updated:
+        await query.answer("❌ Заказ не найден или не обновлён",
+                           show_alert=True)
+        return
+
+    order = get_order(order_id)
+    try:
+        from handlers.orders import format_order_id
+        formatted = format_order_id(
+            order.id, order.created_at) if order else f"#{order_id}"
+        client_msgs = {
+            "in_progress": f"✂️ Ваша вещь в работе.\nЗаказ: {formatted}",
+            "completed":
+            f"🎉 Заказ готов!\nЗаказ: {formatted}\nПриходите за выдачей.",
+            "issued": f"📤 Заказ выдан.\nЗаказ: {formatted}",
+            "cancelled": f"❌ Заказ отменён.\nЗаказ: {formatted}",
+            "new": f"🆕 Ваш заказ зарегистрирован: {formatted}"
+        }
+        client_text = client_msgs.get(
+            new_status_norm, f"📦 Статус заказа обновлён: {new_status_norm}")
+        if order and getattr(order, "user_id", None):
+            try:
+                await context.bot.send_message(chat_id=order.user_id,
+                                               text=client_text)
+            except Exception:
+                logger.warning(
+                    f"Не удалось уведомить пользователя {order.user_id}")
+    except Exception:
+        logger.exception(
+            "Ошибка при уведомлении клиента после изменения статуса")
+
+    try:
+        status_text_map = {
+            "in_progress": "🔄 В работе",
+            "completed": "✅ Готов",
+            "issued": "📤 Выдан",
+            "cancelled": "❌ Отменён",
+            "new": "🆕 Новый"
+        }
+        status_text = status_text_map.get(new_status_norm, new_status_norm)
+        admin_name = user.username or user.first_name or str(user.id)
+        formatted_id = f"#{order_id}"
+        try:
+            from handlers.orders import format_order_id
+            if order:
+                formatted_id = format_order_id(order.id, order.created_at)
+        except Exception:
+            pass
+        new_text = f"✅ Заказ {formatted_id} обновлён\n\n{status_text}\n\n👤 Обновил: @{admin_name}"
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("◀️ К списку заказов",
+                                 callback_data="admin_orders_menu")
+        ]])
+        if query.message and getattr(query.message, "photo", None):
+            try:
+                await query.message.edit_caption(caption=new_text,
+                                                 reply_markup=keyboard)
+            except Exception:
+                await query.edit_message_text(text=new_text,
+                                              reply_markup=keyboard)
+        else:
+            await query.edit_message_text(text=new_text, reply_markup=keyboard)
+    except Exception:
+        logger.exception(
+            "Ошибка при обновлении сообщения админа после смены статуса")
+
+
+async def contact_client(update: Update,
+                         context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Показать способы связи с клиентом"""
+    query = update.callback_query
+    await query.answer()
+    user_id = update.effective_user.id
+    if not is_user_admin(user_id):
+        await query.answer("⛔ Нет доступа", show_alert=True)
+        return
+
+    try:
+        order_id = int(query.data.replace("contact_client_", ""))
+    except Exception:
+        await query.answer("❌ Неверный ID заказа", show_alert=True)
+        return
+
+    order = get_order(order_id)
+    if not order:
+        await query.answer("❌ Заказ не найден", show_alert=True)
+        return
+
+    phone = order.client_phone or "Не указан"
+    tg_url = f"tg://user?id={order.user_id}" if order.user_id else None
+    buttons = []
+    if tg_url:
+        buttons.append(
+            [InlineKeyboardButton("✉️ Написать в Telegram", url=tg_url)])
+    buttons.append([
+        InlineKeyboardButton("◀️ Назад",
+                             callback_data=f"admin_view_{order_id}")
+    ])
+    await query.edit_message_text(
+        f"✉️ *Связь с клиентом*\n\n👤 {order.client_name or 'Не указано'}\n📞 {phone}\n\nНажмите кнопку для связи.",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(buttons))
+
+
+async def open_web_admin(update: Update,
+                         context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Открытие веб-админки"""
+    query = update.callback_query
+    await query.answer()
+    user_id = update.effective_user.id
+    if not is_user_admin(user_id):
+        await query.answer("⛔ Нет доступа", show_alert=True)
+        return
+
+    url = _get_web_admin_orders_url()
+    if not url:
+        await query.answer("❌ Веб-панель не настроена", show_alert=True)
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🌐 Открыть веб-админку", url=url)],
+         [InlineKeyboardButton("◀️ Назад", callback_data="admin_back_menu")]])
+    await query.edit_message_text(f"🌐 *Веб-панель администратора*\n\n{url}",
+                                  reply_markup=keyboard,
+                                  parse_mode="Markdown")
+
+
+# ---------------- Вспомогательные функции ----------------
+
+
+def get_admin_menu_keyboard(
+        stats: Optional[dict] = None) -> InlineKeyboardMarkup:
+    """Клавиатура админ-меню (с метриками)"""
+    if stats is None:
+        try:
+            stats = get_statistics()
+        except Exception:
+            stats = {}
+    new_count = stats.get("new_orders", 0)
+    in_progress = stats.get("in_progress", 0)
+    completed = stats.get("completed", 0)
+    issued = stats.get("issued", 0)
+    keyboard = [
+        [
+            InlineKeyboardButton(f"🆕 Новые ({new_count})",
+                                 callback_data="admin_orders_new"),
+            InlineKeyboardButton(f"🔄 В работе ({in_progress})",
+                                 callback_data="admin_orders_in_progress")
+        ],
+        [
+            InlineKeyboardButton(f"✅ Готовые ({completed})",
+                                 callback_data="admin_orders_completed"),
+            InlineKeyboardButton(f"📤 Выданные ({issued})",
+                                 callback_data="admin_orders_issued")
+        ],
+        [
+            InlineKeyboardButton("👥 Клиенты", callback_data="admin_clients"),
+            InlineKeyboardButton("📊 Статистика", callback_data="admin_stats")
+        ],
+        [
+            InlineKeyboardButton("🌐 Веб-админка",
+                                 callback_data="open_web_admin"),
+            InlineKeyboardButton("◀️ Назад", callback_data="admin_back_menu")
+        ],
+    ]
+    return InlineKeyboardMarkup(keyboard)

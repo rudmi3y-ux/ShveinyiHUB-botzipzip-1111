@@ -503,7 +503,7 @@ async def confirm_order(update: Update,
 
         formatted_order_id = format_order_id(order_id)
 
-        # Отправляем подтверждение клиенту
+        # Отправляем подтверждение клиенту (ОДНО СООБЩЕНИЕ)
         await update.callback_query.edit_message_text(
             text=f"✅ *Заказ принят!*\n\n"
             f"📋 *Номер вашего заказа: {formatted_order_id}*\n\n"
@@ -511,16 +511,6 @@ async def confirm_order(update: Update,
             f"📍 {WORKSHOP_ADDRESS}\n"
             f"📞 {WORKSHOP_PHONE}",
             parse_mode="Markdown")
-
-        # Отправляем дополнительное уведомление
-        try:
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=f"✅ Ваш заказ {formatted_order_id} успешно принят!\n\n"
-                f"Скоро мы свяжемся с вами для уточнения деталей.")
-        except Exception as e:
-            logger.warning(
-                f"Не удалось отправить дополнительное уведомление: {e}")
 
         # Уведомляем администраторов
         await notify_admins(context, order_id, context.user_data, user_id)
@@ -780,7 +770,6 @@ async def handle_order_status_change(update: Update,
             pass
 
 
-# Создаем ConversationHandler для заказов
 def get_order_conversation_handler():
     """Создать и вернуть ConversationHandler для заказов"""
     from telegram.ext import MessageHandler, filters, CallbackQueryHandler
@@ -820,4 +809,5 @@ def get_order_conversation_handler():
             CallbackQueryHandler(cancel_order, pattern="^cancel_order$"),
             MessageHandler(filters.Regex(r'^(/cancel|Отмена)$'), cancel_order)
         ],
-        allow_reentry=True)
+        allow_reentry=True,
+        per_message=False)
