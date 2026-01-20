@@ -348,31 +348,40 @@ async def order_command(update, context):
 
 
 async def services_command(update, context):
-    await update.message.reply_text(text="💰 Выберите категорию услуг:",
-                                    reply_markup=get_prices_menu())
+    if update.message:
+        await update.message.reply_text(text="💰 Выберите категорию услуг:",
+                                        reply_markup=get_prices_menu())
 
 
 async def contact_command(update, context):
     text = f"📍 *Контакты мастерской*\n\n🏠 *Адрес:* {WORKSHOP_INFO['address']}\n\n📞 *Телефон:* {WORKSHOP_INFO['phone']}\n💬 *WhatsApp:* {WORKSHOP_INFO['whatsapp']}\n\n⏰ *График:*\nПн-Чт: 10:00-19:50\nПт: 10:00-19:00\nСб: 10:00-17:00\nВс: выходной"
-    await update.message.reply_text(text, parse_mode="Markdown")
+    if update.message:
+        await update.message.reply_text(text, parse_mode="Markdown")
 
 
 async def menu_command(update, context):
     user = update.effective_user
     name = user.first_name or "друг"
-    await show_menu_with_logo(update.message, name)
+    message = update.message or update.callback_query.message if update.callback_query else None
+    if message:
+        await show_menu_with_logo(message, name)
+    else:
+        # Fallback if somehow both are None, though unlikely in standard command/callback context
+        await update.effective_chat.send_message(f"Чем могу помочь, {name}?", reply_markup=get_main_menu())
 
 
 async def admin_panel_command(update, context):
     user_id = update.effective_user.id
     from handlers.admin import is_user_admin
     if not is_user_admin(user_id):
-        await update.message.reply_text("⛔ У вас нет доступа к этой команде.")
+        if update.message:
+            await update.message.reply_text("⛔ У вас нет доступа к этой команде.")
         return
     text = "📋 *Админ-панель*\n\nВыберите раздел для управления:"
-    await update.message.reply_text(text,
-                                    reply_markup=get_admin_main_menu(),
-                                    parse_mode="Markdown")
+    if update.message:
+        await update.message.reply_text(text,
+                                        reply_markup=get_admin_main_menu(),
+                                        parse_mode="Markdown")
 
 
 async def log_all_updates(update: Update, context):
