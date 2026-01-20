@@ -82,7 +82,7 @@ async def handle_message(update: Update,
             response, needs_human = await get_ai_response(text, user_id)
 
             # Формируем клавиатуру ответа
-            keyboard = get_ai_response_keyboard(show_contact=needs_human)
+            keyboard = get_ai_response_keyboard()
 
             # Отправляем ответ
             await update.message.reply_text(
