@@ -482,14 +482,18 @@ def main() -> None:
                 CallbackQueryHandler(skip_photo, pattern="^skip_photo$"),
                 CallbackQueryHandler(cancel_order, pattern="^cancel_order$")
             ],
+            ENTER_DESCRIPTION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, enter_description),
+                CallbackQueryHandler(skip_description, pattern="^skip_description$"),
+                CallbackQueryHandler(cancel_order, pattern="^cancel_order$")
+            ],
             ENTER_NAME: [
                 CallbackQueryHandler(use_tg_name, pattern="^use_tg_name$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, enter_name),
                 CallbackQueryHandler(cancel_order, pattern="^cancel_order$")
             ],
             ENTER_PHONE: [
-                CallbackQueryHandler(skip_phone_handler,
-                                     pattern="^skip_phone$"),
+                CallbackQueryHandler(skip_phone_handler, pattern="^skip_phone$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, enter_phone),
                 CallbackQueryHandler(cancel_order, pattern="^cancel_order$")
             ],

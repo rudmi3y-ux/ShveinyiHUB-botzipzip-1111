@@ -15,7 +15,7 @@ from handlers.admin import is_user_admin
 logger = logging.getLogger(__name__)
 
 # Константы для состояний ConversationHandler
-SELECT_SERVICE, SEND_PHOTO, ENTER_NAME, ENTER_PHONE, CONFIRM_ORDER = range(5)
+SELECT_SERVICE, SEND_PHOTO, ENTER_DESCRIPTION, ENTER_NAME, ENTER_PHONE, CONFIRM_ORDER = range(6)
 
 # Контактная информация
 WORKSHOP_PHONE = "+7 (968) 396-91-52"
@@ -203,7 +203,7 @@ async def select_service(update: Update,
         await query.edit_message_text(
             text=f"✅ Вы выбрали: *{SERVICE_NAMES.get(service, service)}*\n"
             f"{service_info}\n"
-            f"📸 *Шаг 1/4*: Отправьте фото вашей вещи\n"
+            f"📸 *Шаг 1/5*: Отправьте фото вашей вещи\n"
             f"(или нажмите 'Пропустить')",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown")
@@ -226,30 +226,20 @@ async def receive_photo(update: Update,
             photo = update.message.photo[-1]
             context.user_data['photo_file_id'] = photo.file_id
 
-            # Запрашиваем имя
-            user = update.effective_user
-            user_name = get_user_display_name(user)
-            context.user_data['suggested_name'] = user_name
-
             keyboard = [[
-                InlineKeyboardButton(f"✅ Да, я {user_name}",
-                                     callback_data="use_tg_name")
-            ],
-                        [
-                            InlineKeyboardButton("❌ Отменить",
-                                                 callback_data="cancel_order")
-                        ]]
+                InlineKeyboardButton("⏭ Пропустить описание",
+                                     callback_data="skip_description")
+            ], [InlineKeyboardButton("❌ Отменить", callback_data="cancel_order")]]
 
             await update.message.reply_text(
-                text=f"📸 Фото получено!\n\n"
-                f"👤 *Шаг 2/4*: Как к вам обращаться?\n\n"
-                f"Обращаться к вам *{user_name}*?\n"
-                f"Или напишите другое имя:",
+                text="📸 Фото получено!\n\n"
+                "📝 *Шаг 2/5*: Кратко опишите проблему\n"
+                "(например: 'подшить брюки' или 'замена молнии'):",
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode="Markdown")
 
-            logger.info(f"Переход к состоянию ENTER_NAME (после фото)")
-            return ENTER_NAME
+            logger.info("Переход к состоянию ENTER_DESCRIPTION (после фото)")
+            return ENTER_DESCRIPTION
 
         await update.message.reply_text(
             "Пожалуйста, отправьте фото или нажмите 'Пропустить'.")
@@ -269,6 +259,65 @@ async def skip_photo(update: Update,
         await update.callback_query.answer()
         context.user_data['photo_file_id'] = None
 
+        keyboard = [[
+            InlineKeyboardButton("⏭ Пропустить описание",
+                                 callback_data="skip_description")
+        ], [InlineKeyboardButton("❌ Отменить", callback_data="cancel_order")]]
+
+        await update.callback_query.edit_message_text(
+            text="📝 *Шаг 2/5*: Кратко опишите проблему\n"
+            "(например: 'подшить брюки' или 'замена молнии'):",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown")
+
+        logger.info("Переход к состоянию ENTER_DESCRIPTION (пропуск фото)")
+        return ENTER_DESCRIPTION
+
+    except Exception as e:
+        logger.error(f"Ошибка при пропуске фото: {e}")
+        return ConversationHandler.END
+
+
+async def enter_description(update: Update,
+                            context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Ввод описания проблемы"""
+    try:
+        description = update.message.text.strip()
+        context.user_data['problem_description'] = description
+
+        user = update.effective_user
+        user_name = get_user_display_name(user)
+        context.user_data['suggested_name'] = user_name
+
+        keyboard = [[
+            InlineKeyboardButton(f"✅ Да, я {user_name}",
+                                 callback_data="use_tg_name")
+        ], [InlineKeyboardButton("❌ Отменить", callback_data="cancel_order")]]
+
+        await update.message.reply_text(
+            text=f"👤 *Шаг 3/5*: Как к вам обращаться?\n\n"
+            f"Обращаться к вам *{user_name}*?\n"
+            f"Или напишите другое имя:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown")
+
+        logger.info(f"Переход к состоянию ENTER_NAME (после описания: {description})")
+        return ENTER_NAME
+
+    except Exception as e:
+        logger.error(f"Ошибка при вводе описания: {e}")
+        await update.message.reply_text(
+            "❌ Не удалось обработать описание. Пожалуйста, попробуйте еще раз.")
+        return ENTER_DESCRIPTION
+
+
+async def skip_description(update: Update,
+                           context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Пропуск описания проблемы"""
+    try:
+        await update.callback_query.answer()
+        context.user_data['problem_description'] = None
+
         user = update.effective_user
         user_name = get_user_display_name(user)
         context.user_data['suggested_name'] = user_name
@@ -279,17 +328,17 @@ async def skip_photo(update: Update,
         ], [InlineKeyboardButton("❌ Отменить", callback_data="cancel_order")]]
 
         await update.callback_query.edit_message_text(
-            text=f"👤 *Шаг 2/4*: Как к вам обращаться?\n\n"
+            text=f"👤 *Шаг 3/5*: Как к вам обращаться?\n\n"
             f"Обращаться к вам *{user_name}*?\n"
             f"Или напишите другое имя:",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown")
 
-        logger.info(f"Переход к состоянию ENTER_NAME (пропуск фото)")
+        logger.info("Переход к состоянию ENTER_NAME (пропуск описания)")
         return ENTER_NAME
 
     except Exception as e:
-        logger.error(f"Ошибка при пропуске фото: {e}")
+        logger.error(f"Ошибка при пропуске описания: {e}")
         return ConversationHandler.END
 
 
@@ -310,7 +359,7 @@ async def use_tg_name(update: Update,
 
         await update.callback_query.edit_message_text(
             text=f"Отлично, {name}! 👋\n\n"
-            "📞 *Шаг 3/4*: Укажите номер телефона\n\n"
+            "📞 *Шаг 4/5*: Укажите номер телефона\n\n"
             "Введите номер для SMS о готовности\n"
             "или нажмите «Пропустить» — пришлём уведомление сюда",
             reply_markup=InlineKeyboardMarkup(keyboard),
@@ -345,7 +394,7 @@ async def enter_name(update: Update,
 
         await update.message.reply_text(
             text=f"Приятно познакомиться, {name}! 👋\n\n"
-            "📞 *Шаг 3/4*: Укажите номер телефона\n\n"
+            "📞 *Шаг 4/5*: Укажите номер телефона\n\n"
             "Введите номер для SMS о готовности\n"
             "или нажмите «Пропустить» — пришлём уведомление сюда",
             reply_markup=InlineKeyboardMarkup(keyboard),
@@ -361,15 +410,20 @@ async def enter_name(update: Update,
         return ENTER_NAME
 
 
+async def skip_phone_handler(update: Update,
+                         context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Пропуск телефона (хендлер для ConversationHandler)"""
+    return await skip_phone(update, context)
 async def skip_phone(update: Update,
                      context: ContextTypes.DEFAULT_TYPE) -> int:
     """Пропуск телефона"""
     try:
-        await update.callback_query.answer()
+        if update.callback_query:
+            await update.callback_query.answer()
         context.user_data['client_phone'] = "Telegram"
 
         logger.info(f"Переход к состоянию CONFIRM_ORDER (пропущен телефон)")
-        return await show_confirmation(update, context, is_callback=True)
+        return await show_confirmation(update, context, is_callback=True if update.callback_query else False)
 
     except Exception as e:
         logger.error(f"Ошибка при пропуске телефона: {e}")
@@ -427,6 +481,7 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE,
     """Показать подтверждение заказа"""
     try:
         service_name = context.user_data.get('service_name', 'Услуга')
+        problem_description = context.user_data.get('problem_description')
         client_name = context.user_data.get('client_name', 'Клиент')
         phone = context.user_data.get('client_phone', 'Telegram')
         has_photo = "✅ Фото прикреплено" if context.user_data.get(
@@ -440,8 +495,12 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE,
         ], [InlineKeyboardButton("❌ Отменить", callback_data="cancel_order")]]
 
         text = (f"📋 *Проверьте данные заказа:*\n\n"
-                f"🔹 Услуга: {service_name}\n"
-                f"🔹 Имя: {client_name}\n"
+                f"🔹 Услуга: {service_name}\n")
+        
+        if problem_description:
+            text += f"🔹 Проблема: {problem_description}\n"
+            
+        text += (f"🔹 Имя: {client_name}\n"
                 f"🔹 Связь: {phone_display}\n"
                 f"🔹 {has_photo}\n\n"
                 f"Всё верно?")
@@ -482,10 +541,15 @@ async def confirm_order(update: Update,
                  phone=context.user_data.get('client_phone'))
 
         # Создаем заказ
+        problem_desc = context.user_data.get('problem_description')
+        full_description = context.user_data.get('service_name', 'Услуга')
+        if problem_desc:
+            full_description = f"{full_description}: {problem_desc}"
+
         order_id = create_order(
             user_id=user_id,
             service_type=context.user_data.get('service', 'unknown'),
-            description=context.user_data.get('service_name', 'Услуга'),
+            description=full_description,
             photo_file_id=context.user_data.get('photo_file_id'),
             client_name=context.user_data.get('client_name'),
             client_phone=context.user_data.get('client_phone'))
