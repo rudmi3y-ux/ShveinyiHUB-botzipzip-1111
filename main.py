@@ -11,7 +11,7 @@ import logging
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 from telegram import Update, MenuButtonCommands, BotCommand
 from telegram.ext import (ApplicationBuilder, CommandHandler,
