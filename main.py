@@ -14,14 +14,44 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from telegram import Update, MenuButtonCommands, BotCommand
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, ConversationHandler, filters, TypeHandler
+from telegram.ext import (ApplicationBuilder, CommandHandler,
+                          CallbackQueryHandler, MessageHandler,
+                          ConversationHandler, filters, TypeHandler)
 
 from handlers import commands, messages, admin
 from handlers.commands import faq_command, status_command
-from handlers.orders import order_start, select_service, receive_photo, skip_photo, enter_name, enter_phone, confirm_order, cancel_order, use_tg_name, skip_phone as skip_phone_handler, handle_order_status_change, SELECT_SERVICE, SEND_PHOTO, ENTER_NAME, ENTER_PHONE, CONFIRM_ORDER
+
+# --- ИСПРАВЛЕННЫЕ ИМПОРТЫ ---
+from handlers.orders import (
+    order_start,
+    select_service,
+    receive_photo,
+    skip_photo,
+    enter_name,
+    enter_phone,
+    confirm_order,
+    cancel_order,
+    use_tg_name,
+    skip_phone as skip_phone_handler,
+    handle_order_status_change,
+
+    # Добавлены недостающие функции и состояния
+    enter_description,
+    skip_description,
+    ENTER_DESCRIPTION,
+    SELECT_SERVICE,
+    SEND_PHOTO,
+    ENTER_NAME,
+    ENTER_PHONE,
+    CONFIRM_ORDER)
+# ----------------------------
+
 from handlers.reviews import get_review_conversation_handler, request_review
-from keyboards import get_main_menu, get_prices_menu, get_faq_menu, get_back_button, get_admin_main_menu
-from utils.database import init_db, get_user_orders, get_orders_pending_feedback, mark_feedback_requested
+from keyboards import (get_main_menu, get_prices_menu, get_faq_menu,
+                       get_back_button, get_admin_main_menu)
+from utils.database import (init_db, get_user_orders,
+                            get_orders_pending_feedback,
+                            mark_feedback_requested)
 from utils.prices import format_prices_text, import_prices_data
 
 _lock = None
@@ -367,7 +397,8 @@ async def menu_command(update, context):
         await show_menu_with_logo(message, name)
     else:
         # Fallback if somehow both are None, though unlikely in standard command/callback context
-        await update.effective_chat.send_message(f"Чем могу помочь, {name}?", reply_markup=get_main_menu())
+        await update.effective_chat.send_message(f"Чем могу помочь, {name}?",
+                                                 reply_markup=get_main_menu())
 
 
 async def admin_panel_command(update, context):
@@ -375,7 +406,8 @@ async def admin_panel_command(update, context):
     from handlers.admin import is_user_admin
     if not is_user_admin(user_id):
         if update.message:
-            await update.message.reply_text("⛔ У вас нет доступа к этой команде.")
+            await update.message.reply_text(
+                "⛔ У вас нет доступа к этой команде.")
         return
     text = "📋 *Админ-панель*\n\nВыберите раздел для управления:"
     if update.message:
@@ -483,8 +515,10 @@ def main() -> None:
                 CallbackQueryHandler(cancel_order, pattern="^cancel_order$")
             ],
             ENTER_DESCRIPTION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, enter_description),
-                CallbackQueryHandler(skip_description, pattern="^skip_description$"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND,
+                               enter_description),
+                CallbackQueryHandler(skip_description,
+                                     pattern="^skip_description$"),
                 CallbackQueryHandler(cancel_order, pattern="^cancel_order$")
             ],
             ENTER_NAME: [
@@ -493,7 +527,8 @@ def main() -> None:
                 CallbackQueryHandler(cancel_order, pattern="^cancel_order$")
             ],
             ENTER_PHONE: [
-                CallbackQueryHandler(skip_phone_handler, pattern="^skip_phone$"),
+                CallbackQueryHandler(skip_phone_handler,
+                                     pattern="^skip_phone$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, enter_phone),
                 CallbackQueryHandler(cancel_order, pattern="^cancel_order$")
             ],
