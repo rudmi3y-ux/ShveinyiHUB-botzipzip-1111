@@ -46,12 +46,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             caption = (
                 f"🛠 *Панель администратора*\n\n"
                 f"Добро пожаловать, {name}!\n"
-                f"Выберите раздел для управления:"
+                f"Используйте кнопки меню для управления:"
             )
 
-            # Анимация загрузки
-            temp_msg = await update.message.reply_text("🪡", reply_markup=remove_keyboard())
-            await temp_msg.delete()
+            # Обновляем команды в боковом меню
+            await set_admin_commands(context.bot, user.id)
 
             await update.message.reply_text(
                 caption,

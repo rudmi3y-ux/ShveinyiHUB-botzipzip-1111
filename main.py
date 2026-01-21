@@ -87,6 +87,8 @@ def release_lock():
 
 atexit.register(release_lock)
 
+from handlers.admin_panel.handlers import set_admin_commands, show_admin_stats, show_spam_candidates, mark_as_spam_callback
+
 # --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ---
 BOT_START_TIME = time.time()
 WORKSHOP_INFO = {
@@ -484,13 +486,22 @@ def main() -> None:
 
     # Админ команды
     app_bot.add_handler(CommandHandler("admin", admin_panel_command))
-    app_bot.add_handler(CommandHandler("stats", admin.admin_stats))
+    app_bot.add_handler(CommandHandler("stats", show_admin_stats))
     app_bot.add_handler(CommandHandler("orders", admin.admin_orders))
-    app_bot.add_handler(CommandHandler("neworders", admin.admin_new_orders))
     app_bot.add_handler(CommandHandler("users", admin.admin_users))
     app_bot.add_handler(CommandHandler("spam", admin.admin_spam))
-    app_bot.add_handler(CommandHandler("broadcast", admin.broadcast_start))
-    app_bot.add_handler(CommandHandler("setadmin", admin.set_admin_command))
+    app_bot.add_handler(CommandHandler("search", admin.admin_orders)) # Позже добавим поиск
+    
+    # Текстовые кнопки админа
+    app_bot.add_handler(MessageHandler(filters.TEXT & filters.Regex("^📈 Статистика$"), show_admin_stats))
+    app_bot.add_handler(MessageHandler(filters.TEXT & filters.Regex("^📊 Все заказы$"), admin.admin_orders))
+    app_bot.add_handler(MessageHandler(filters.TEXT & filters.Regex("^❌ Удалить спам$"), show_spam_candidates))
+    app_bot.add_handler(MessageHandler(filters.TEXT & filters.Regex("^👥 Пользователи$"), admin.admin_users))
+    app_bot.add_handler(MessageHandler(filters.TEXT & filters.Regex("^📢 Рассылка$"), admin.broadcast_start))
+    app_bot.add_handler(MessageHandler(filters.TEXT & filters.Regex("^◀️ Выйти$"), commands.start))
+
+    # Callbacks
+    app_bot.add_handler(CallbackQueryHandler(mark_as_spam_callback, pattern="^mark_spam_"))
 
     # Callbacks
     app_bot.add_handler(

@@ -137,22 +137,21 @@ def get_ai_response_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(buttons)
 
 
-def get_admin_main_menu() -> InlineKeyboardMarkup:
-    """Главное меню админа."""
+def get_admin_main_menu() -> ReplyKeyboardMarkup:
+    """Главное меню админа (Reply Keyboard)."""
+    keyboard = [
+        [KeyboardButton("📊 Все заказы"), KeyboardButton("📈 Статистика")],
+        [KeyboardButton("🔍 Поиск заказа"), KeyboardButton("❌ Удалить спам")],
+        [KeyboardButton("👥 Пользователи"), KeyboardButton("📢 Рассылка")],
+        [KeyboardButton("⚙️ Настройки"), KeyboardButton("◀️ Выйти")]
+    ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+
+def get_admin_inline_menu() -> InlineKeyboardMarkup:
+    """Инлайн меню админа (старое для совместимости или доп. функций)."""
     buttons = [
-        [InlineKeyboardButton("📊 Статистика", callback_data="admin_stats")],
-        [
-            InlineKeyboardButton("📦 Управление заказами",
-                                 callback_data="admin_orders_menu")
-        ],
-        [
-            InlineKeyboardButton("👥 Пользователи",
-                                 callback_data="admin_clients")
-        ],
-        [
-            InlineKeyboardButton("◀️ Выйти из админки",
-                                 callback_data="back_menu")
-        ],
+        [InlineKeyboardButton("📦 Управление через веб", callback_data="open_web_admin")],
     ]
     return InlineKeyboardMarkup(buttons)
 
