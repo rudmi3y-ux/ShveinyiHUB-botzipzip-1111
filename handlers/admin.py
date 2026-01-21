@@ -444,7 +444,7 @@ async def admin_menu_callback(update: Update,
             for order in orders[:20]:
                 formatted = format_order_id(int(order.id), order.created_at)
                 phone = order.client_phone or "📲 TG"
-                text += f"{formatted} • {order.client_name or 'Аноним'} | {phone}\n"
+                text += f"📦 {formatted} • {order.client_name or 'Аноним'} | {phone}\n"
                 keyboard.append([
                     InlineKeyboardButton(
                         f"📦 {formatted}",
