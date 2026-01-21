@@ -130,6 +130,8 @@ async def handle_admin_mode(update: Update, context: ContextTypes.DEFAULT_TYPE,
         if context.user_data.get('broadcast_mode'):
             from handlers.admin import broadcast_send
             await broadcast_send(update, context, text)
+            # Сброс режима рассылки после отправки
+            context.user_data['broadcast_mode'] = False
             return True
 
         # Проверяем режим ответа пользователю
