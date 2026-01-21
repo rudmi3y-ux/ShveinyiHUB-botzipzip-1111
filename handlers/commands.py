@@ -5,6 +5,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from keyboards import get_main_menu, get_admin_main_menu, remove_keyboard, get_faq_menu, get_back_button
 from utils.database import add_user, check_today_first_visit, get_user_orders
+from handlers.admin_panel.handlers import set_admin_commands
 from handlers.admin import is_user_admin
 
 # Настройка логирования
@@ -31,12 +32,22 @@ def format_order_id(order_id: int, created_at: datetime) -> str:
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Команда /start с умным приветствием и заставкой"""
+    if not update.message:
+        return
+
     try:
         user = update.effective_user
+        if not user:
+            return
+            
         name = user.first_name or "друг"
 
         # Добавляем пользователя в базу
-        add_user(user.id, user.username, user.first_name, user.last_name)
+        try:
+            add_user(user.id, user.username or "", user.first_name or "", user.last_name or "")
+        except Exception as e:
+            logger.error(f"Error adding user {user.id} to DB: {e}")
+            
         today_first_visit = check_today_first_visit(user.id)
 
         # Проверяем администратора
@@ -46,12 +57,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             caption = (
                 f"🛠 *Панель администратора*\n\n"
                 f"Добро пожаловать, {name}!\n"
-                f"Выберите раздел для управления:"
+                f"Используйте кнопки меню для управления:"
             )
 
-            # Анимация загрузки
-            temp_msg = await update.message.reply_text("🪡", reply_markup=remove_keyboard())
-            await temp_msg.delete()
+            # Обновляем команды в боковом меню
+            try:
+                await set_admin_commands(context.bot, user.id)
+            except Exception as e:
+                logger.error(f"Error setting admin commands: {e}")
 
             await update.message.reply_text(
                 caption,

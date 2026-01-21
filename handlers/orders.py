@@ -15,7 +15,8 @@ from handlers.admin import is_user_admin
 logger = logging.getLogger(__name__)
 
 # Константы для состояний ConversationHandler
-SELECT_SERVICE, SEND_PHOTO, ENTER_DESCRIPTION, ENTER_NAME, ENTER_PHONE, CONFIRM_ORDER = range(6)
+SELECT_SERVICE, SEND_PHOTO, ENTER_DESCRIPTION, ENTER_NAME, ENTER_PHONE, CONFIRM_ORDER = range(
+    6)
 
 # Контактная информация
 WORKSHOP_PHONE = "+7 (968) 396-91-52"
@@ -229,7 +230,11 @@ async def receive_photo(update: Update,
             keyboard = [[
                 InlineKeyboardButton("⏭ Пропустить описание",
                                      callback_data="skip_description")
-            ], [InlineKeyboardButton("❌ Отменить", callback_data="cancel_order")]]
+            ],
+                        [
+                            InlineKeyboardButton("❌ Отменить",
+                                                 callback_data="cancel_order")
+                        ]]
 
             await update.message.reply_text(
                 text="📸 Фото получено!\n\n"
@@ -301,13 +306,15 @@ async def enter_description(update: Update,
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown")
 
-        logger.info(f"Переход к состоянию ENTER_NAME (после описания: {description})")
+        logger.info(
+            f"Переход к состоянию ENTER_NAME (после описания: {description})")
         return ENTER_NAME
 
     except Exception as e:
         logger.error(f"Ошибка при вводе описания: {e}")
         await update.message.reply_text(
-            "❌ Не удалось обработать описание. Пожалуйста, попробуйте еще раз.")
+            "❌ Не удалось обработать описание. Пожалуйста, попробуйте еще раз."
+        )
         return ENTER_DESCRIPTION
 
 
@@ -411,9 +418,11 @@ async def enter_name(update: Update,
 
 
 async def skip_phone_handler(update: Update,
-                         context: ContextTypes.DEFAULT_TYPE) -> int:
+                             context: ContextTypes.DEFAULT_TYPE) -> int:
     """Пропуск телефона (хендлер для ConversationHandler)"""
     return await skip_phone(update, context)
+
+
 async def skip_phone(update: Update,
                      context: ContextTypes.DEFAULT_TYPE) -> int:
     """Пропуск телефона"""
@@ -423,7 +432,10 @@ async def skip_phone(update: Update,
         context.user_data['client_phone'] = "Telegram"
 
         logger.info(f"Переход к состоянию CONFIRM_ORDER (пропущен телефон)")
-        return await show_confirmation(update, context, is_callback=True if update.callback_query else False)
+        return await show_confirmation(
+            update,
+            context,
+            is_callback=True if update.callback_query else False)
 
     except Exception as e:
         logger.error(f"Ошибка при пропуске телефона: {e}")
@@ -496,14 +508,14 @@ async def show_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE,
 
         text = (f"📋 *Проверьте данные заказа:*\n\n"
                 f"🔹 Услуга: {service_name}\n")
-        
+
         if problem_description:
             text += f"🔹 Проблема: {problem_description}\n"
-            
+
         text += (f"🔹 Имя: {client_name}\n"
-                f"🔹 Связь: {phone_display}\n"
-                f"🔹 {has_photo}\n\n"
-                f"Всё верно?")
+                 f"🔹 Связь: {phone_display}\n"
+                 f"🔹 {has_photo}\n\n"
+                 f"Всё верно?")
 
         if is_callback:
             await update.callback_query.edit_message_text(
@@ -767,7 +779,7 @@ async def handle_order_status_change(update: Update,
                 formatted_id = format_order_id(order_id, order.created_at)
                 client_messages = {
                     "in_progress":
-                    (f"✂️ Ваша вещь уже в работе!\n\n"
+                    (f"✂️ Приятные новости! Мы уже взялись за работу над вашей вещью. Как только всё будет готово — сразу сообщим!\n\n"
                      f"Заказ: {formatted_id}\n"
                      f"Делаем всё качественно и аккуратно. "
                      f"Мы свяжемся с вами, когда заказ будет готов."),

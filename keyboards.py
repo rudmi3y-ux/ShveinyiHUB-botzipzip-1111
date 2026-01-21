@@ -137,22 +137,20 @@ def get_ai_response_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(buttons)
 
 
-def get_admin_main_menu() -> InlineKeyboardMarkup:
-    """Главное меню админа."""
+def get_admin_main_menu() -> ReplyKeyboardMarkup:
+    """Главное меню админа (Reply Keyboard)."""
+    keyboard = [
+        [KeyboardButton("📊 Все заказы"), KeyboardButton("📈 Статистика")],
+        [KeyboardButton("👥 Пользователи"), KeyboardButton("📢 Рассылка")],
+        [KeyboardButton("❌ Удалить спам"), KeyboardButton("◀️ Выйти")]
+    ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+
+def get_admin_inline_menu() -> InlineKeyboardMarkup:
+    """Инлайн меню админа (старое для совместимости или доп. функций)."""
     buttons = [
-        [InlineKeyboardButton("📊 Статистика", callback_data="admin_stats")],
-        [
-            InlineKeyboardButton("📦 Управление заказами",
-                                 callback_data="admin_orders_menu")
-        ],
-        [
-            InlineKeyboardButton("👥 Пользователи",
-                                 callback_data="admin_clients")
-        ],
-        [
-            InlineKeyboardButton("◀️ Выйти из админки",
-                                 callback_data="back_menu")
-        ],
+        [InlineKeyboardButton("📦 Управление через веб", callback_data="open_web_admin")],
     ]
     return InlineKeyboardMarkup(buttons)
 
@@ -213,7 +211,15 @@ def get_admin_order_detail_keyboard(order_id: int,
     elif order_status == 'completed':
         buttons.append([
             InlineKeyboardButton("📤 Выдан",
-                                 callback_data=f"status_issued_{order_id}")
+                                 callback_data=f"status_issued_{order_id}"),
+            InlineKeyboardButton("🗑 Удалить",
+                                 callback_data=f"status_deleted_{order_id}")
+        ])
+    else:
+        # Для отмененных, выданных и т.д. даем возможность удалить
+        buttons.append([
+            InlineKeyboardButton("🗑 Удалить заказ",
+                                 callback_data=f"status_deleted_{order_id}")
         ])
 
     # Кнопка для связи с клиентом

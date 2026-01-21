@@ -8,86 +8,68 @@ import json
 import socket
 import atexit
 import logging
-from http.server import HTTPServer, BaseHTTPRequestHandler
 from dotenv import load_dotenv
 
-load_dotenv()
+# Принудительно загружаем .env, чтобы игнорировать старые токены хостинга
+load_dotenv(override=True)
+
+# --- ИМПОРТ ВЕБ-АДМИНКИ ---
+# Если папка называется webapp и файл app.py, то импорт такой:
+try:
+    from webapp.app import app
+except ImportError:
+    # Заглушка на случай, если структура файлов другая, чтобы бот не упал
+    from flask import Flask
+    app = Flask(__name__)
+
+    @app.route('/')
+    def index():
+        return "Ошибка импорта webapp.app. Проверьте структуру папок."
+
 
 from telegram import Update, MenuButtonCommands, BotCommand
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, ConversationHandler, filters, TypeHandler
+from telegram.ext import (ApplicationBuilder, CommandHandler,
+                          CallbackQueryHandler, MessageHandler,
+                          ConversationHandler, filters, TypeHandler, ContextTypes)
 
 from handlers import commands, messages, admin
 from handlers.commands import faq_command, status_command
 from handlers.orders import order_start, select_service, receive_photo, skip_photo, enter_description, skip_description, enter_name, enter_phone, confirm_order, cancel_order, use_tg_name, skip_phone as skip_phone_handler, handle_order_status_change, SELECT_SERVICE, SEND_PHOTO, ENTER_DESCRIPTION, ENTER_NAME, ENTER_PHONE, CONFIRM_ORDER
 from handlers.reviews import get_review_conversation_handler, request_review
-from keyboards import get_main_menu, get_prices_menu, get_faq_menu, get_back_button, get_admin_main_menu
-from utils.database import init_db, get_user_orders, get_orders_pending_feedback, mark_feedback_requested
+from keyboards import (get_main_menu, get_prices_menu, get_faq_menu,
+                       get_back_button, get_admin_main_menu)
+from utils.database import (init_db, get_user_orders,
+                            get_orders_pending_feedback,
+                            mark_feedback_requested)
 from utils.prices import format_prices_text, import_prices_data
 
 _lock = None
 logger = logging.getLogger(__name__)
 
 
+# --- БЛОКИРОВКА ПОВТОРНОГО ЗАПУСКА ---
 def create_lock():
     global _lock
     if os.getenv("DISABLE_INSTANCE_LOCK", "0") == "1":
-        logger.info("Instance lock disabled")
         return None
     lock_port = int(os.getenv("LOCK_PORT", "48975"))
-    lockfile_path = os.getenv("LOCKFILE_PATH", "/tmp/poslednya_v1.lock")
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.bind(("127.0.0.1", lock_port))
         s.listen(1)
         s.setblocking(False)
         _lock = {"type": "socket", "obj": s, "port": lock_port}
-        logging.info(f"Instance locked on 127.0.0.1:{lock_port}")
         return _lock
     except OSError:
         pass
-    try:
-        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-        fd = os.open(lockfile_path, flags, 0o644)
-        with os.fdopen(fd, "w") as f:
-            f.write(str(os.getpid()))
-        _lock = {"type": "file", "path": lockfile_path}
-        logging.info(f"Instance locked via pidfile {lockfile_path}")
-        return _lock
-    except FileExistsError:
-        try:
-            with open(lockfile_path, "r") as f:
-                existing_pid = int(f.read().strip() or 0)
-        except:
-            existing_pid = None
-        if existing_pid:
-            try:
-                os.kill(existing_pid, 0)
-                print(f"Another instance running (pid {existing_pid})")
-                sys.exit(1)
-            except:
-                try:
-                    os.remove(lockfile_path)
-                    fd = os.open(lockfile_path,
-                                 os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
-                    with os.fdopen(fd, "w") as f:
-                        f.write(str(os.getpid()))
-                    _lock = {"type": "file", "path": lockfile_path}
-                    return _lock
-                except:
-                    sys.exit(1)
+    return None
 
 
 def release_lock():
     global _lock
     try:
-        if not _lock:
-            return
         if isinstance(_lock, dict) and _lock.get("type") == "socket":
             _lock["obj"].close()
-        elif isinstance(_lock, dict) and _lock.get("type") == "file":
-            path = _lock.get("path")
-            if path and os.path.exists(path):
-                os.remove(path)
     except Exception:
         pass
     finally:
@@ -96,45 +78,10 @@ def release_lock():
 
 atexit.register(release_lock)
 
+from handlers.admin_panel.handlers import set_admin_commands, show_admin_stats, show_spam_candidates, mark_as_spam_callback
+
+# --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ---
 BOT_START_TIME = time.time()
-LAST_UPDATE_TIME = time.time()
-BOT_IS_RUNNING = False
-
-
-class HealthHandler(BaseHTTPRequestHandler):
-
-    def log_message(self, format, *args):
-        return
-
-    def do_GET(self):
-        global LAST_UPDATE_TIME, BOT_IS_RUNNING
-        if self.path in ("/", "/health", "/status"):
-            uptime = int(time.time() - BOT_START_TIME)
-            response = {
-                "status": "alive" if BOT_IS_RUNNING else "starting",
-                "uptime_seconds": uptime,
-                "last_update": LAST_UPDATE_TIME,
-                "message": "Бот работает 24/7!"
-            }
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps(response).encode())
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-
-def start_health_server(port=8080):
-    try:
-        server = HTTPServer(("0.0.0.0", port), HealthHandler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        logging.info(f"Health check на порту {port}")
-    except Exception as e:
-        logging.warning(f"Health server: {e}")
-
-
 WORKSHOP_INFO = {
     "name": "Швейная мастерская",
     "address":
@@ -143,7 +90,13 @@ WORKSHOP_INFO = {
     "whatsapp": "+7 (968) 396-91-52"
 }
 
+# --- ЛОГИРОВАНИЕ ---
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO)
 
+
+# --- CALLBACK ФУНКЦИИ ---
 async def callback_services(update, context):
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(
@@ -163,6 +116,7 @@ async def callback_price_category(update, context, category):
             text="Цены не найдены", reply_markup=get_prices_menu())
 
 
+# Обертки для категорий цен
 async def callback_price_jacket(update, context):
     await callback_price_category(update, context, "jacket")
 
@@ -221,6 +175,7 @@ async def callback_check_status(update, context):
         text=text, reply_markup=get_back_button(), parse_mode="Markdown")
 
 
+# FAQ Callbacks
 async def callback_faq(update, context):
     await update.callback_query.answer()
     try:
@@ -233,7 +188,7 @@ async def callback_faq(update, context):
 
 async def callback_faq_services(update, context):
     await update.callback_query.answer()
-    text = "📋 *Какие услуги мы выполняем:*\n\n✂️ Подшив и укорачивание\n🔄 Замена молний и пуговиц\n📐 Ушивание и расширение\n🧵 Штопка и реставрация\n🧥 Ремонт верхней одежды\n🎒 Ремонт кожаных изделий\n🐾 Ремонт шуб и дублёнок\n🪟 Пошив штор"
+    text = "📋 *Какие услуги мы выполняем:*\n\n✂️ Подшив и укорачивание\n🔄 Замена молний и пуговиц\n📐 Ушивание и расширение\n🧥 Ремонт верхней одежды\n🎒 Ремонт кожаных изделий\n🐾 Ремонт шуб и дублёнок\n🪟 Пошив штор"
     try:
         await update.callback_query.edit_message_text(
             text=text, reply_markup=get_faq_menu(), parse_mode="Markdown")
@@ -326,6 +281,7 @@ async def callback_contact_master(update, context):
         text=text, reply_markup=get_back_button(), parse_mode="Markdown")
 
 
+# Команды меню
 LOGO_PATH = os.path.join(os.path.dirname(__file__), "assets", "logo.jpg")
 
 
@@ -362,12 +318,9 @@ async def contact_command(update, context):
 async def menu_command(update, context):
     user = update.effective_user
     name = user.first_name or "друг"
-    message = update.message or update.callback_query.message if update.callback_query else None
-    if message:
-        await show_menu_with_logo(message, name)
-    else:
-        # Fallback if somehow both are None, though unlikely in standard command/callback context
-        await update.effective_chat.send_message(f"Чем могу помочь, {name}?", reply_markup=get_main_menu())
+    message = update.message or (update.callback_query.message
+                                 if update.callback_query else None)
+    if message: await show_menu_with_logo(message, name)
 
 
 async def admin_panel_command(update, context):
@@ -375,7 +328,8 @@ async def admin_panel_command(update, context):
     from handlers.admin import is_user_admin
     if not is_user_admin(user_id):
         if update.message:
-            await update.message.reply_text("⛔ У вас нет доступа к этой команде.")
+            await update.message.reply_text(
+                "⛔ У вас нет доступа к этой команде.")
         return
     text = "📋 *Админ-панель*\n\nВыберите раздел для управления:"
     if update.message:
@@ -385,8 +339,6 @@ async def admin_panel_command(update, context):
 
 
 async def log_all_updates(update: Update, context):
-    global LAST_UPDATE_TIME
-    LAST_UPDATE_TIME = time.time()
     user_id = update.effective_user.id if update.effective_user else "unknown"
     if update.callback_query:
         logger.info(f"📥 CALLBACK: {update.callback_query.data} from {user_id}")
@@ -396,22 +348,30 @@ async def log_all_updates(update: Update, context):
 
 
 create_lock()
-
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
+# --- ГЛАВНАЯ ФУНКЦИЯ ---
 def main() -> None:
-    global BOT_IS_RUNNING
-
     if not BOT_TOKEN:
         logger.error("BOT_TOKEN не установлен!")
         return
 
-    start_health_server(int(os.getenv("PORT", "8080")))
+    # Блокировка порта 8080 для веб-админки
+    def run_flask():
+        try:
+            # В Replit 5000 - стандартный порт для webview.
+            app.run(host="0.0.0.0", port=5000, use_reloader=False, threaded=True)
+        except Exception as e:
+            logger.error(f"Ошибка при запуске Flask: {e}")
+
+    # Запускаем Flask в отдельном потоке
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+
+    # Даем Flask время на запуск
+    time.sleep(3)
+    # -----------------------------------
 
     init_db()
     try:
@@ -419,8 +379,6 @@ def main() -> None:
     except Exception:
         logger.warning("Не удалось загрузить цены")
     logger.info("База данных инициализирована")
-
-    BOT_IS_RUNNING = True
 
     async def post_init(application):
         await application.bot.set_my_commands([
@@ -434,7 +392,6 @@ def main() -> None:
         ])
         await application.bot.set_chat_menu_button(
             menu_button=MenuButtonCommands())
-        logger.info("Кнопка меню настроена")
 
         async def periodic_review_check():
             await asyncio.sleep(60)
@@ -449,8 +406,6 @@ def main() -> None:
                             await request_review(application, user_id,
                                                  order_id)
                             mark_feedback_requested(order_id)
-                            logger.info(
-                                f"Review request sent for order {order_id}")
                         except Exception as e:
                             logger.error(f"Failed review request: {e}")
                 except Exception as e:
@@ -459,13 +414,12 @@ def main() -> None:
 
         try:
             application.create_task(periodic_review_check())
-            logger.info("Фоновая задача для отзывов запущена")
         except Exception as e:
             logger.error(f"Не удалось запустить фоновую задачу: {e}")
 
-    app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
-
-    app.add_handler(TypeHandler(Update, log_all_updates), group=-1)
+    app_bot = ApplicationBuilder().token(BOT_TOKEN).post_init(
+        post_init).build()
+    app_bot.add_handler(TypeHandler(Update, log_all_updates), group=-1)
 
     order_conversation = ConversationHandler(
         entry_points=[
@@ -483,8 +437,10 @@ def main() -> None:
                 CallbackQueryHandler(cancel_order, pattern="^cancel_order$")
             ],
             ENTER_DESCRIPTION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, enter_description),
-                CallbackQueryHandler(skip_description, pattern="^skip_description$"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND,
+                               enter_description),
+                CallbackQueryHandler(skip_description,
+                                     pattern="^skip_description$"),
                 CallbackQueryHandler(cancel_order, pattern="^cancel_order$")
             ],
             ENTER_NAME: [
@@ -493,7 +449,8 @@ def main() -> None:
                 CallbackQueryHandler(cancel_order, pattern="^cancel_order$")
             ],
             ENTER_PHONE: [
-                CallbackQueryHandler(skip_phone_handler, pattern="^skip_phone$"),
+                CallbackQueryHandler(skip_phone_handler,
+                                     pattern="^skip_phone$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, enter_phone),
                 CallbackQueryHandler(cancel_order, pattern="^cancel_order$")
             ],
@@ -508,90 +465,106 @@ def main() -> None:
         ],
         allow_reentry=True,
         per_message=False)
-    app.add_handler(order_conversation)
-    review_conversation = get_review_conversation_handler()
-    app.add_handler(review_conversation)
 
-    app.add_handler(CommandHandler("start", commands.start))
-    app.add_handler(CommandHandler("help", commands.help_command))
-    app.add_handler(CommandHandler("faq", faq_command))
-    app.add_handler(CommandHandler("status", status_command))
-    app.add_handler(CommandHandler("services", services_command))
-    app.add_handler(CommandHandler("contact", contact_command))
+    # Broadcast message handler
+    async def handle_broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        # Проверяем, является ли пользователь админом
+        from handlers.admin import is_user_admin, broadcast_send
+        if not update.effective_user or not is_user_admin(update.effective_user.id):
+            return
 
-    app.add_handler(CommandHandler("admin", admin_panel_command))
-    app.add_handler(CommandHandler("stats", admin.admin_stats))
-    app.add_handler(CommandHandler("orders", admin.admin_orders))
-    app.add_handler(CommandHandler("neworders", admin.admin_new_orders))
-    app.add_handler(CommandHandler("users", admin.admin_users))
-    app.add_handler(CommandHandler("spam", admin.admin_spam))
-    app.add_handler(CommandHandler("broadcast", admin.broadcast_start))
-    app.add_handler(CommandHandler("setadmin", admin.set_admin_command))
+        if context.user_data.get("broadcast_mode"):
+            if update.message and update.message.text:
+                if update.message.text == "/cancel":
+                    context.user_data["broadcast_mode"] = False
+                    await update.message.reply_text("❌ Рассылка отменена.")
+                    return
+                
+                await broadcast_send(update, context)
+                context.user_data["broadcast_mode"] = False
 
-    app.add_handler(
+    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE, handle_broadcast_message), group=1)
+
+    app_bot.add_handler(order_conversation)
+    app_bot.add_handler(get_review_conversation_handler())
+
+    # Основные команды
+    app_bot.add_handler(CommandHandler("start", commands.start))
+    app_bot.add_handler(CommandHandler("help", commands.help_command))
+    app_bot.add_handler(CommandHandler("faq", faq_command))
+    app_bot.add_handler(CommandHandler("status", status_command))
+    app_bot.add_handler(CommandHandler("services", services_command))
+    app_bot.add_handler(CommandHandler("contact", contact_command))
+    app_bot.add_handler(CommandHandler("menu", menu_command))
+
+    # Админ команды
+    app_bot.add_handler(CommandHandler("admin", admin_panel_command))
+    app_bot.add_handler(CommandHandler("stats", admin_stats_info))
+    app_bot.add_handler(CommandHandler("orders", admin_orders_list))
+    app_bot.add_handler(CommandHandler("users", admin_users_list))
+    app_bot.add_handler(CommandHandler("spam", admin_spam_logs))
+    app_bot.add_handler(CommandHandler("broadcast", admin_broadcast_start))
+    app_bot.add_handler(CommandHandler("search", admin_orders_list)) # Позже добавим поиск
+    
+    # Текстовые кнопки админа
+    from handlers.admin import admin_orders as admin_orders_list, admin_stats as admin_stats_info, admin_users as admin_users_list, admin_spam as admin_spam_logs, broadcast_start as admin_broadcast_start
+
+    app_bot.add_handler(MessageHandler(filters.TEXT & filters.Regex("^📈 Статистика$"), admin_stats_info))
+    app_bot.add_handler(MessageHandler(filters.TEXT & filters.Regex("^📊 Все заказы$"), admin_orders_list))
+    app_bot.add_handler(MessageHandler(filters.TEXT & filters.Regex("^❌ Удалить спам$"), show_spam_candidates))
+    app_bot.add_handler(MessageHandler(filters.TEXT & filters.Regex("^👥 Пользователи$"), admin_users_list))
+    app_bot.add_handler(MessageHandler(filters.TEXT & filters.Regex("^📢 Рассылка$"), admin_broadcast_start))
+    app_bot.add_handler(MessageHandler(filters.TEXT & filters.Regex("^◀️ Выйти$"), commands.start))
+
+    # Callbacks
+    app_bot.add_handler(CallbackQueryHandler(mark_as_spam_callback, pattern="^mark_spam_"))
+
+    # Callbacks
+    app_bot.add_handler(
         CallbackQueryHandler(admin.admin_menu_callback, pattern="^admin_"))
-    app.add_handler(
+    app_bot.add_handler(
         CallbackQueryHandler(admin.open_web_admin, pattern="^open_web_admin$"))
-    app.add_handler(
+    app_bot.add_handler(
         CallbackQueryHandler(admin.admin_view_order, pattern="^admin_view_"))
-    app.add_handler(
+    app_bot.add_handler(
         CallbackQueryHandler(admin.change_order_status, pattern="^status_"))
-    app.add_handler(
+    app_bot.add_handler(
         CallbackQueryHandler(admin.contact_client, pattern="^contact_client_"))
-
-    app.add_handler(
+    app_bot.add_handler(
         CallbackQueryHandler(callback_services, pattern="^services$"))
-    app.add_handler(
+    app_bot.add_handler(
         CallbackQueryHandler(callback_check_status, pattern="^check_status$"))
-    app.add_handler(CallbackQueryHandler(callback_faq, pattern="^faq$"))
-    app.add_handler(
+    app_bot.add_handler(CallbackQueryHandler(callback_faq, pattern="^faq$"))
+    app_bot.add_handler(
         CallbackQueryHandler(callback_contacts, pattern="^contacts$"))
-
-    app.add_handler(
-        CallbackQueryHandler(callback_price_jacket, pattern="^price_jacket$"))
-    app.add_handler(
-        CallbackQueryHandler(callback_price_leather,
-                             pattern="^price_leather$"))
-    app.add_handler(
-        CallbackQueryHandler(callback_price_curtains,
-                             pattern="^price_curtains$"))
-    app.add_handler(
-        CallbackQueryHandler(callback_price_coat, pattern="^price_coat$"))
-    app.add_handler(
-        CallbackQueryHandler(callback_price_fur, pattern="^price_fur$"))
-    app.add_handler(
-        CallbackQueryHandler(callback_price_outerwear,
-                             pattern="^price_outerwear$"))
-    app.add_handler(
-        CallbackQueryHandler(callback_price_pants, pattern="^price_pants$"))
-    app.add_handler(
-        CallbackQueryHandler(callback_price_dress, pattern="^price_dress$"))
-
-    app.add_handler(
-        CallbackQueryHandler(callback_faq_services, pattern="^faq_services$"))
-    app.add_handler(
-        CallbackQueryHandler(callback_faq_prices, pattern="^faq_prices$"))
-    app.add_handler(
-        CallbackQueryHandler(callback_faq_timing, pattern="^faq_timing$"))
-    app.add_handler(
-        CallbackQueryHandler(callback_faq_location, pattern="^faq_location$"))
-    app.add_handler(
-        CallbackQueryHandler(callback_faq_payment, pattern="^faq_payment$"))
-    app.add_handler(
-        CallbackQueryHandler(callback_faq_order, pattern="^faq_order$"))
-    app.add_handler(
-        CallbackQueryHandler(callback_faq_other, pattern="^faq_other$"))
-
-    app.add_handler(
-        CallbackQueryHandler(handle_order_status_change,
-                             pattern="^admin_open_"))
-    app.add_handler(CallbackQueryHandler(callback_back, pattern="^back_menu$"))
-    app.add_handler(
+    app_bot.add_handler(
+        CallbackQueryHandler(callback_back, pattern="^back_menu$"))
+    app_bot.add_handler(
         CallbackQueryHandler(callback_contact_master,
                              pattern="^contact_master$"))
-    app.add_handler(CommandHandler("menu", menu_command))
+    app_bot.add_handler(
+        CallbackQueryHandler(handle_order_status_change,
+                             pattern="^admin_open_"))
 
-    app.add_handler(
+    # Callbacks цен
+    for cat in [
+            "jacket", "leather", "curtains", "coat", "fur", "outerwear",
+            "pants", "dress"
+    ]:
+        app_bot.add_handler(
+            CallbackQueryHandler(globals()[f"callback_price_{cat}"],
+                                 pattern=f"^price_{cat}$"))
+
+    # Callbacks FAQ
+    for sub in [
+            "services", "prices", "timing", "location", "payment", "order",
+            "other"
+    ]:
+        app_bot.add_handler(
+            CallbackQueryHandler(globals()[f"callback_faq_{sub}"],
+                                 pattern=f"^faq_{sub}$"))
+
+    app_bot.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND,
                        messages.handle_message))
 
@@ -607,35 +580,27 @@ def main() -> None:
         except:
             pass
 
-    app.add_error_handler(error_handler)
-
-    logger.info("🤖 Бот запущен и готов к работе!")
-    app.run_polling(drop_pending_updates=True)
+    app_bot.add_error_handler(error_handler)
+    logger.info("🤖 Бот запущен!")
+    app_bot.run_polling(drop_pending_updates=True)
 
 
 def run_with_restart():
-    logger.info("⏳ Ожидание 15 секунд...")
-    time.sleep(15)
-
+    logger.info("⏳ Ожидание 5 секунд...")
+    time.sleep(5)
     max_retries = 10
     retry_count = 0
-
     while retry_count < max_retries:
         try:
             main()
             break
         except KeyboardInterrupt:
-            logger.info("Бот остановлен пользователем")
+            logger.info("Бот остановлен")
             break
         except Exception as e:
             retry_count += 1
             logger.error(f"Критическая ошибка #{retry_count}: {e}")
-            if retry_count < max_retries:
-                wait_time = min(30, 5 * retry_count)
-                logger.info(f"Перезапуск через {wait_time} сек...")
-                time.sleep(wait_time)
-            else:
-                logger.critical("Достигнут лимит перезапусков.")
+            time.sleep(10)
 
 
 if __name__ == "__main__":
