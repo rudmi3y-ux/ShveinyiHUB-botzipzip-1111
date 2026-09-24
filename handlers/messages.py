@@ -6,6 +6,7 @@ from telegram.constants import ChatAction
 from utils.gigachat_api import get_ai_response
 from utils.anti_spam import anti_spam
 from utils.database import add_user, is_user_blocked, get_user_info
+import static_texts as T
 from keyboards import get_main_menu, get_ai_response_keyboard
 from handlers.admin import is_user_admin
 
@@ -101,12 +102,8 @@ async def handle_message(update: Update,
 
         except Exception as e:
             logger.error(f"Ошибка при получении ответа от AI: {e}")
-            await update.message.reply_text(
-                "🤖 Извините, у меня возникли технические трудности. "
-                "Пожалуйста, попробуйте позже или свяжитесь с нами напрямую:\n\n"
-                "📞 +7 (968) 396-91-52\n"
-                "📍 г. Москва, ул. Маршала Федоренко д.12, ТЦ \"Бусиново\"",
-                reply_markup=get_main_menu())
+            await update.message.reply_text(T.AI_UNAVAILABLE_TEXT,
+                                            reply_markup=get_main_menu())
 
     except Exception as e:
         logger.error(f"Критическая ошибка в обработке сообщения: {e}")
@@ -167,22 +164,13 @@ async def handle_non_text_message(update: Update,
         message = update.message
 
         if message.photo:
-            await message.reply_text(
-                "📸 Спасибо за фото! К сожалению, я пока не умею анализировать изображения.\n\n"
-                "Пожалуйста, опишите вашу проблему текстом или свяжитесь с нами:\n"
-                "📞 +7 (968) 396-91-52")
+            await message.reply_text(T.PHOTO_UNSUPPORTED_TEXT)
 
         elif message.document:
-            await message.reply_text(
-                "📎 Получен документ. Для обработки технических файлов (выкройки, схемы) "
-                "пожалуйста, свяжитесь напрямую с мастером:\n\n"
-                "📞 +7 (968) 396-91-52")
+            await message.reply_text(T.DOCUMENT_RECEIVED_TEXT)
 
         elif message.voice or message.audio:
-            await message.reply_text(
-                "🎤 Я получил ваше голосовое сообщение. К сожалению, сейчас я работаю только с текстом.\n\n"
-                "Пожалуйста, напишите ваш вопрос текстом или позвоните нам:\n"
-                "📞 +7 (968) 396-91-52")
+            await message.reply_text(T.VOICE_UNSUPPORTED_TEXT)
 
         elif message.sticker:
             # Можно просто проигнорировать или ответить шуткой
@@ -217,12 +205,8 @@ async def handle_callback_query(update: Update,
 
         # Обработка различных callback-действий
         if data == 'contact_human':
-            await query.edit_message_text(
-                "👩‍💼 Хотите поговорить с живым специалистом?\n\n"
-                "📞 Позвоните нам: +7 (968) 396-91-52\n"
-                "📍 Приходите: г. Москва, ул. Маршала Федоренко д.12, ТЦ \"Бусиново\"\n\n"
-                "Часы работы: Пн-Чт: 10:00-19:50, Пт: 10:00-19:00, Сб: 10:00-17:00, Вс: выходной",
-                parse_mode="Markdown")
+            await query.edit_message_text(T.CONTACT_HUMAN_TEXT,
+                                          parse_mode="Markdown")
 
         elif data == 'rate_response':
             await query.edit_message_text(

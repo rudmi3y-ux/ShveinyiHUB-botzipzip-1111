@@ -10,25 +10,6 @@ MOSCOW_TZ = timezone(timedelta(hours=3))
 
 engine = create_engine(DATABASE_URL, echo=False)
 
-
-def get_user_info(user_id: int) -> dict:
-    """Получение информации о пользователе"""
-    # Заглушка - возвращаем пустой словарь
-    return {}
-
-
-def add_user(user_id: int,
-             username: str = None,
-             first_name: str = None) -> None:
-    """Добавление пользователя"""
-    pass
-
-
-def is_user_blocked(user_id: int) -> bool:
-    """Проверка, заблокирован ли пользователь"""
-    return False
-
-
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
@@ -282,6 +263,11 @@ def add_user(user_id: int,
         return None
     finally:
         session.close()
+
+
+def get_user_info(user_id: int):
+    """Получение записи пользователя по Telegram ID (или None)."""
+    return get_user(user_id)
 
 
 def get_user(user_id: int):
@@ -686,11 +672,44 @@ def get_user_reviews(user_id: int):
     return []
 
 
-def update_review_status(review_id: int, status: str):
-    """Update review status"""
-    pass
+def update_review_status(review_id: int, is_approved: bool = True,
+                         rejected_reason: str = None) -> bool:
+    """Update review moderation status (approve/reject)."""
+    session = get_session()
+    try:
+        review = session.query(Review).filter(Review.id == review_id).first()
+        if not review:
+            return False
+        review.is_approved = is_approved
+        if rejected_reason is not None:
+            review.rejected_reason = rejected_reason
+        if is_approved and getattr(review, "published_at", None) is None:
+            review.published_at = datetime.now(MOSCOW_TZ)
+        session.commit()
+        return True
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Error updating review status: {e}")
+        return False
+    finally:
+        session.close()
 
 
 def get_recent_reviews(limit: int = 10):
     """Get recent reviews"""
-    return []
+    session = get_session()
+    try:
+        return (session.query(Review)
+                .order_by(Review.created_at.desc())
+                .limit(limit).all())
+    finally:
+        session.close()
+
+
+def get_review(review_id: int):
+    """Get a single review by id."""
+    session = get_session()
+    try:
+        return session.query(Review).filter(Review.id == review_id).first()
+    finally:
+        session.close()

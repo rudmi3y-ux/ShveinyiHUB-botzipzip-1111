@@ -27,7 +27,7 @@ MAX_COMMENT_LENGTH = 1000
 MIN_COMMENT_LENGTH = 10
 
 # URL для отзывов на Яндекс.Карты
-YANDEX_REVIEWS_URL = "https://yandex.ru/maps/org/shveyny_hub/1233246900?si=qazrp3fnzwhkjgancr36aquutw"
+from config import YANDEX_REVIEWS_URL
 
 # Паттерны для фильтрации нецензурной лексики (расширенный список)
 PROFANITY_PATTERNS = [

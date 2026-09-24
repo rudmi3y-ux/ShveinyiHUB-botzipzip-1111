@@ -18,20 +18,8 @@ logger = logging.getLogger(__name__)
 SELECT_SERVICE, SEND_PHOTO, ENTER_DESCRIPTION, ENTER_NAME, ENTER_PHONE, CONFIRM_ORDER = range(
     6)
 
-# Контактная информация
-WORKSHOP_PHONE = "+7 (968) 396-91-52"
-WORKSHOP_ADDRESS = "г. Москва, (МЦД/м. Ховрино) ул. Маршала Федоренко д.12, ТЦ \"Бусиново\", 1 этаж"
-
-# Часы работы (0=Пн, 6=Вс)
-WORK_HOURS = {
-    0: "10:00-19:50",  # Пн
-    1: "10:00-19:50",  # Вт
-    2: "10:00-19:50",  # Ср
-    3: "10:00-19:50",  # Чт
-    4: "10:00-19:00",  # Пт
-    5: "10:00-17:00",  # Сб
-    6: None  # Вс - выходной
-}
+# Контактная информация и часы работы — единый источник в config.py
+from config import WORK_HOURS, WORKSHOP_ADDRESS, WORKSHOP_PHONE
 
 # Часовой пояс Москвы (UTC+3)
 MOSCOW_TZ = timezone(timedelta(hours=3))

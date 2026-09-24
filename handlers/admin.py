@@ -392,6 +392,13 @@ async def admin_menu_callback(update: Update,
 
     data = query.data or ""
 
+    # Кнопки детального просмотра заказа: admin_view_<id>.
+    # (В группе 0 этот колбэк может быть перехвачен ConversationHandler'ом,
+    # поэтому обрабатываем его и здесь.)
+    if data.startswith("admin_view_"):
+        await admin_view_order(update, context)
+        return
+
     # Обработка команд из Reply Keyboard
     if data == "📊 Все заказы":
         await admin_orders(update, context)
@@ -487,7 +494,14 @@ async def admin_menu_callback(update: Update,
         await admin_view_order(update, context)
         return
 
-    if data.startswith("status_"):
+    # Прочие колбэки (в т.ч. чужие пространства имён, например admin_review_*),
+    # которые здесь не обрабатываются, молча пропускаем — их подхватят
+    # собственные хендлеры в других группах.
+    if not data.startswith(("status_", "contact_client_")):
+        logger.debug("admin_menu_callback: необрабатываемый колбэк %s", data)
+        return
+
+    if data.startswith("status_") and not data.startswith("status_deleted_"):
         await change_order_status(update, context)
         return
 
