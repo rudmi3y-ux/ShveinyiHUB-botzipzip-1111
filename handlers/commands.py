@@ -4,6 +4,7 @@ from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
 from keyboards import get_main_menu, get_admin_main_menu, remove_keyboard, get_faq_menu, get_back_button
+from config import WORKSHOP_ADDRESS, WORKSHOP_LOCATION, WORKSHOP_PHONE
 from utils.database import add_user, check_today_first_visit, get_user_orders
 from handlers.admin_panel.handlers import set_admin_commands
 from handlers.admin import is_user_admin
@@ -11,9 +12,6 @@ from handlers.admin import is_user_admin
 # Настройка логирования
 logger = logging.getLogger(__name__)
 
-# Константы
-WORKSHOP_ADDRESS = "г. Москва, (МЦД/м. Ховрино) ул. Маршала Федоренко д.12, ТЦ \"Бусиново\", 1 этаж"
-WORKSHOP_PHONE = "+7 (968) 396-91-52"
 HOURS = "Пн-Чт: 10:00-19:50, Пт: 10:00-19:00, Сб: 10:00-17:00, Вс: выходной"
 
 # Путь к логотипу - исправленный путь
@@ -234,9 +232,7 @@ async def contact_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         # Попробуем отправить локацию
         try:
-            # Координаты для ТЦ "Бусиново" (примерные)
-            latitude = 55.870
-            longitude = 37.492
+            latitude, longitude = WORKSHOP_LOCATION
             await update.message.reply_location(
                 latitude=latitude,
                 longitude=longitude

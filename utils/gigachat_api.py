@@ -1,5 +1,6 @@
 import os
 import logging
+from config import WORKSHOP_PHONE
 from gigachat import GigaChat
 from gigachat.models import Chat, Messages, MessagesRole
 from .cache import cache
@@ -59,7 +60,7 @@ class GigaChatAPI:
             fallback, found = self._get_fallback_response(message)
             if found:
                 return fallback, False
-            return "Извините, сервис временно недоступен. Позвоните нам: +7 (968) 396-91-52", True
+            return f"Извините, сервис временно недоступен. Позвоните нам: {WORKSHOP_PHONE}", True
         
         try:
             user_context = get_user_context(user_id) if user_id else {
@@ -107,7 +108,7 @@ class GigaChatAPI:
             if found:
                 return fallback, False
             
-            return "Не удалось получить ответ. Попробуйте переформулировать вопрос или позвоните: +7 (968) 396-91-52", True
+            return f"Не удалось получить ответ. Попробуйте переформулировать вопрос или позвоните: {WORKSHOP_PHONE}", True
         except Exception as e:
             logger.error(f"GigaChat error: {e}")
             
@@ -115,7 +116,7 @@ class GigaChatAPI:
             if found:
                 return fallback, False
             
-            return "Ой, что-то пошло не так 🧵 Попробуйте позже или позвоните нам: +7 (968) 396-91-52", True
+            return f"Ой, что-то пошло не так 🧵 Попробуйте позже или позвоните нам: {WORKSHOP_PHONE}", True
     
     def _check_needs_human(self, question: str, answer: str) -> bool:
         """Определяет, нужна ли помощь человека"""

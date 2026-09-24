@@ -6,6 +6,8 @@
 import re
 from datetime import datetime, timezone, timedelta
 
+from config import WORKSHOP_INFO
+
 MOSCOW_TZ = timezone(timedelta(hours=3))
 
 
@@ -199,8 +201,8 @@ def generate_adaptive_prompt(user_context: dict, message: str) -> str:
 - Уточнить детали у мастера
 
 ИНФОРМАЦИЯ О МАСТЕРСКОЙ:
-📍 Адрес: г. Москва, (МЦД/м. Ховрино) ул. Маршала Федоренко д.12, , ТЦ "Бусиново", 1 этаж
-📞 Телефон/WhatsApp: +7 (968) 396-91-52
+📍 Адрес: {address}
+📞 Телефон/WhatsApp: {phone}
 ⏰ График: Пн-Чт 10:00-19:50, Пт 10:00-19:00, Сб 10:00-17:00, Вс выходной
 
 БАЗА ЗНАНИЙ (ПРАЙС-ЛИСТ И УСЛУГИ):

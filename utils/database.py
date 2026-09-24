@@ -10,25 +10,6 @@ MOSCOW_TZ = timezone(timedelta(hours=3))
 
 engine = create_engine(DATABASE_URL, echo=False)
 
-
-def get_user_info(user_id: int) -> dict:
-    """Получение информации о пользователе"""
-    # Заглушка - возвращаем пустой словарь
-    return {}
-
-
-def add_user(user_id: int,
-             username: str = None,
-             first_name: str = None) -> None:
-    """Добавление пользователя"""
-    pass
-
-
-def is_user_blocked(user_id: int) -> bool:
-    """Проверка, заблокирован ли пользователь"""
-    return False
-
-
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
@@ -282,6 +263,11 @@ def add_user(user_id: int,
         return None
     finally:
         session.close()
+
+
+def get_user_info(user_id: int):
+    """Получение записи пользователя по Telegram ID (или None)."""
+    return get_user(user_id)
 
 
 def get_user(user_id: int):
