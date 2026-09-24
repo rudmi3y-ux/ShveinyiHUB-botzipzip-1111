@@ -1,6 +1,15 @@
-# Python bytecode and cache
+# Compiled and binary files
 __pycache__/
 *.pyc
 
+# Dependency directories
+.venv/
+venv/
+
 # Environment files
 .env
+.env.local
+.env.*.local
+
+# Database files
+*.db

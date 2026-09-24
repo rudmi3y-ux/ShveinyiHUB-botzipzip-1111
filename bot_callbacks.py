@@ -16,7 +16,8 @@ from telegram import Update
 from telegram.ext import Application, CallbackQueryHandler
 
 import static_texts as T
-from keyboards import get_back_button, get_faq_menu, get_main_menu, get_prices_menu
+from keyboards import (get_back_button, get_faq_menu, get_main_menu,
+                       get_prices_menu)
 from utils.database import get_user_orders
 from utils.prices import format_prices_text
 
@@ -52,7 +53,7 @@ async def _edit(update: Update, text: str, reply_markup=None) -> None:
 
 
 async def show_main_menu(update: Update) -> None:
-    """Кнопка «◀️ Назад» — возврат в главное меню."""
+    """Кнопки «◀️ Назад» / «🏠 В главное меню» — возврат в главное меню."""
     await _edit(update, T.MAIN_MENU_TITLE, get_main_menu())
 
 
@@ -122,26 +123,66 @@ async def check_status(update: Update) -> None:
 
 
 def register(application: Application) -> None:
-    """Регистрирует все callback-обработчики главного меню."""
+    """Регистрирует все callback-обработчики главного меню.
+
+    ИСПРАВЛЕНИЕ БАГА: раньше эти колбэки регистрировались в группе 0
+    ПОСЛЕ ConversationHandler'а заказов, и PTB выбирал всегда ПЕРВЫЙ
+    подходящий хендлер в группе. Пока пользователь хоть раз не «выходил»
+    из диалога заказа, все кнопки меню (services/faq/contacts/категории
+    цен/back_menu) перехватывались ConversationHandler'ом и молча
+    игнорировались — кнопки выглядели некликабельными.
+
+    Решение: колбэки меню вынесены в отдельную группу (group=2), которая
+    обрабатывает нажатия ВСЕГДА, независимо от состояния диалога.
+    Внутри группы порядок важен: сначала точные паттерны категорий,
+    затем широкие service_/admin_, в конце catch-all back/menu/cancel.
+    """
+    from handlers import admin as admin_handlers
+    from handlers.orders import select_service
+
+    # --- Точные паттерны кнопок меню ---
     application.add_handler(
-        CallbackQueryHandler(show_services, pattern="^services$"))
+        CallbackQueryHandler(show_services, pattern="^services$"), group=2)
     application.add_handler(
-        CallbackQueryHandler(check_status, pattern="^check_status$"))
-    application.add_handler(CallbackQueryHandler(show_faq, pattern="^faq$"))
+        CallbackQueryHandler(check_status, pattern="^check_status$"),
+        group=2)
     application.add_handler(
-        CallbackQueryHandler(show_contacts, pattern="^contacts$"))
+        CallbackQueryHandler(show_faq, pattern="^faq$"), group=2)
     application.add_handler(
-        CallbackQueryHandler(show_main_menu, pattern="^back_menu$"))
+        CallbackQueryHandler(show_contacts, pattern="^contacts$"), group=2)
     application.add_handler(
         CallbackQueryHandler(show_contact_master,
-                             pattern="^contact_master$"))
+                             pattern="^contact_master$"), group=2)
 
     for cat in PRICE_CATEGORIES:
         application.add_handler(
             CallbackQueryHandler(partial(show_price_category, category=cat),
-                                 pattern=f"^price_{cat}$"))
+                                 pattern=f"^price_{cat}$"), group=2)
 
     for topic, text in FAQ_TOPICS.items():
         application.add_handler(
             CallbackQueryHandler(make_faq_handler(text),
-                                 pattern=f"^faq_{topic}$"))
+                                 pattern=f"^faq_{topic}$"), group=2)
+
+    # --- Широкие паттерны: категории услуг и админ-колбэки ---
+    # (внутри активного диалога заказа их обработает ConversationHandler
+    # в группе 0; здесь они срабатывают вне диалога)
+    application.add_handler(
+        CallbackQueryHandler(select_service, pattern=r"^service_"), group=2)
+    application.add_handler(
+        CallbackQueryHandler(admin_handlers.admin_menu_callback,
+                             pattern=r"^admin_"), group=2)
+    application.add_handler(
+        CallbackQueryHandler(admin_handlers.change_order_status,
+                             pattern=r"^status_"), group=2)
+    application.add_handler(
+        CallbackQueryHandler(admin_handlers.contact_client,
+                             pattern=r"^contact_client_"), group=2)
+
+    # --- Catch-all: возврат в главное меню / отмена ---
+    # Охватывает back_menu, menu (кнопки из отзывов) и cancel_order.
+    # Регистрируется ПОСЛЕДНИМ, чтобы точные паттерны выше имели приоритет.
+    application.add_handler(
+        CallbackQueryHandler(show_main_menu,
+                             pattern=r"^(back_menu|menu|cancel_order)$"),
+        group=2)
