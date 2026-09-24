@@ -12,7 +12,8 @@
 import logging
 from functools import partial
 
-from telegram import Update
+from telegram import (InlineKeyboardButton,
+                           InlineKeyboardMarkup, Update)
 from telegram.ext import Application, CallbackQueryHandler
 
 import static_texts as T
@@ -169,6 +170,43 @@ def register(application: Application) -> None:
     # в группе 0; здесь они срабатывают вне диалога)
     application.add_handler(
         CallbackQueryHandler(select_service, pattern=r"^service_"), group=2)
+    # «Список отзывов» перехватывался широким паттерном ^admin_ в группе 2,
+    # поэтому регистрируется РАНЬШЕ него — отдельным точным хендлером.
+    async def show_review_list(update, context):
+        """Кнопка «📋 Список отзывов» из статистики отзывов."""
+        from utils.database import get_recent_reviews
+        query = update.callback_query
+        await query.answer()
+        if not admin_handlers.is_user_admin(update.effective_user.id):
+            await query.answer("⛔ Нет доступа", show_alert=True)
+            return
+        reviews = get_recent_reviews(limit=15)
+        if not reviews:
+            text = "📭 Отзывов пока нет."
+        else:
+            lines = []
+            for r in reviews:
+                status = "✅" if r.is_approved else ("🚫" if r.rejected_reason else "⏳")
+                comment = (r.comment[:60] + "…") if r.comment and len(r.comment) > 60 else (r.comment or "—")
+                lines.append(f"{status} ⭐{r.rating}: {comment}")
+            text = "📋 *Последние отзывы:*\n\n" + "\n".join(lines)
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("📊 Статистика отзывов",
+                                 callback_data="admin_review_stats")
+        ], [
+            InlineKeyboardButton("◀️ Назад к админ-меню",
+                                 callback_data="admin_back_menu")
+        ]])
+        try:
+            await query.edit_message_text(text, reply_markup=keyboard,
+                                          parse_mode="Markdown")
+        except Exception as e:
+            logger.debug("show_review_list edit failed: %s", e)
+
+    application.add_handler(
+        CallbackQueryHandler(show_review_list,
+                             pattern=r"^admin_review_list$"), group=2)
+
     application.add_handler(
         CallbackQueryHandler(admin_handlers.admin_menu_callback,
                              pattern=r"^admin_"), group=2)
@@ -186,3 +224,22 @@ def register(application: Application) -> None:
         CallbackQueryHandler(show_main_menu,
                              pattern=r"^(back_menu|menu|cancel_order)$"),
         group=2)
+
+    # --- Админ-колбэки, дублированные вне группы 0 ---
+    # admin_view_<id>: если у админа «завис» активный диалог заказа/отзыва
+    # (группа 0), кнопки списка заказов иначе молча игнорировались.
+    application.add_handler(
+        CallbackQueryHandler(admin_handlers.admin_menu_callback,
+                             pattern=r"^admin_view_\d+$"), group=3)
+
+    # --- Колбэки отзывов ---
+    # В группе 0 зарегистрирован только ConversationHandler отзыва
+    # (entry review_rate:...). Остальные кнопки уведомлений об отзывах
+    # нигде не были подключены — get_admin_review() возвращает их хендлеры,
+    # которые раньше никто не вызывал («мёртвые» некликабельные кнопки).
+    from handlers.reviews import get_admin_review_handlers
+
+    for handler in get_admin_review_handlers():
+        application.add_handler(handler, group=4)
+
+
